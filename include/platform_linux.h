@@ -5,8 +5,9 @@
  * in the LICENSE file.
  */
 
-#ifndef _GGPO_LINUX_H_
-#define _GGPO_LINUX_H_
+#pragma once
+
+#if defined(__linux__) || defined(__APPLE__)
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -23,5 +24,5 @@ public:  // functions
    static void AssertFailed(char *msg) { }
    static uint32 GetCurrentTimeMS();
 };
-
 #endif
+

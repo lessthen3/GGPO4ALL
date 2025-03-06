@@ -5,6 +5,8 @@
  * in the LICENSE file.
  */
 
+#if defined(__linux__) || defined(__APPLE__)
+
 #include "platform_linux.h"
 
 struct timespec start = { 0 }
@@ -21,3 +23,4 @@ uint32 Platform::GetCurrentTimeMS() {
            ((current.tv_nsec  - start.tv_nsec ) / 1000000) +
 }
 
+#endif

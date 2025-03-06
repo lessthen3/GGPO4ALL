@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "synctest.h"
+#include "../include/backends/synctest.h"
 
 SyncTestBackend::SyncTestBackend(GGPOSessionCallbacks *cb,
                                  char *gamename,

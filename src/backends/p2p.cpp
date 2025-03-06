@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "p2p.h"
+#include "../include/backends/p2p.h"
 
 static const int RECOMMENDATION_INTERVAL           = 240;
 static const int DEFAULT_DISCONNECT_TIMEOUT        = 5000;

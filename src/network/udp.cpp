@@ -5,8 +5,8 @@
  * in the LICENSE file.
  */
 
-#include "types.h"
-#include "udp.h"
+#include "../include/types.h"
+#include "../include/network/udp.h"
 
 SOCKET
 CreateSocket(uint16 bind_port, int retries)

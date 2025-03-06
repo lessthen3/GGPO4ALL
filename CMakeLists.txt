@@ -24,7 +24,7 @@ endif()
 
 ####################################### Enforce 64-bit Requirement
 
-if(${CMAKE_SIZEOF_VOID_P} NOT EQUAL 8)
+if(NOT ${CMAKE_SIZEOF_VOID_P} EQUAL 8)
     message(FATAL_ERROR "GGPO4ALL only supports 64-bit platforms.")
 endif()
 

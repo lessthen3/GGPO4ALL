@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "spectator.h"
+#include "../include/backends/spectator.h"
 
 SpectatorBackend::SpectatorBackend(GGPOSessionCallbacks *cb,
                                    const char* gamename,
