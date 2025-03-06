@@ -38,7 +38,7 @@ elseif(APPLE)
 
 	set(PLATFORM_NAME "osx")
 
-	set_property(
+	set_property( #Clang++/g++ compiler settings
 		TARGET ${target} 
 		APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Wpedantic
 	)
@@ -47,7 +47,7 @@ elseif(UNIX)
 
 	set(PLATFORM_NAME "linux")
 
-	set_property(
+	set_property( #Clang++/g++ compiler settings
 		TARGET ${target} 
 		APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Wpedantic
 	)
@@ -90,6 +90,7 @@ target_include_directories(
 )
 
 ####################################### Build Message
+
 message(STATUS "Building GGPO4ALL for ${PLATFORM_NAME} in ${CMAKE_BUILD_TYPE} mode.")
 message(STATUS "Build artifacts will be stored in: ${OUTPUT_DIR}")
 
