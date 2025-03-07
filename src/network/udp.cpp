@@ -9,33 +9,33 @@
 #include "../include/network/udp.h"
 
 SOCKET
-CreateSocket(uint16 bind_port, int retries)
-{
-   SOCKET s;
-   sockaddr_in sin;
-   uint16 port;
-   int optval = 1;
+    CreateSocket(uint16_t bind_port, int retries)
+    {
+       SOCKET s;
+       sockaddr_in sin;
+       uint16_t port;
+       int optval = 1;
 
-   s = socket(AF_INET, SOCK_DGRAM, 0);
-   setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&optval, sizeof optval);
-   setsockopt(s, SOL_SOCKET, SO_DONTLINGER, (const char *)&optval, sizeof optval);
+       s = socket(AF_INET, SOCK_DGRAM, 0);
+       setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&optval, sizeof optval);
+       setsockopt(s, SOL_SOCKET, SO_DONTLINGER, (const char *)&optval, sizeof optval);
 
-   // non-blocking...
-   u_long iMode = 1;
-   ioctlsocket(s, FIONBIO, &iMode);
+       // non-blocking...
+       u_long iMode = 1;
+       ioctlsocket(s, FIONBIO, &iMode);
 
-   sin.sin_family = AF_INET;
-   sin.sin_addr.s_addr = htonl(INADDR_ANY);
-   for (port = bind_port; port <= bind_port + retries; port++) {
-      sin.sin_port = htons(port);
-      if (bind(s, (sockaddr *)&sin, sizeof sin) != SOCKET_ERROR) {
-         Log("Udp bound to port: %d.\n", port);
-         return s;
-      }
-   }
-   closesocket(s);
-   return INVALID_SOCKET;
-}
+       sin.sin_family = AF_INET;
+       sin.sin_addr.s_addr = htonl(INADDR_ANY);
+       for (port = bind_port; port <= bind_port + retries; port++) {
+          sin.sin_port = htons(port);
+          if (bind(s, (sockaddr *)&sin, sizeof sin) != SOCKET_ERROR) {
+             Log("Udp bound to port: %d.\n", port);
+             return s;
+          }
+       }
+       closesocket(s);
+       return INVALID_SOCKET;
+    }
 
 Udp::Udp() :
    _socket(INVALID_SOCKET),
@@ -52,7 +52,7 @@ Udp::~Udp(void)
 }
 
 void
-Udp::Init(uint16 port, Poll *poll, Callbacks *callbacks)
+Udp::Init(uint16_t port, Poll *poll, Callbacks *callbacks)
 {
    _callbacks = callbacks;
 
@@ -109,17 +109,17 @@ Udp::OnLoopPoll(void *cookie)
 
 
 void
-Udp::Log(const char *fmt, ...)
-{
-   char buf[1024];
-   size_t offset;
-   va_list args;
+    Udp::Log(const char *fmt, ...)
+    {
+       char buf[1024];
+       size_t offset;
+       va_list args;
 
-   strcpy_s(buf, "udp | ");
-   offset = strlen(buf);
-   va_start(args, fmt);
-   vsnprintf(buf + offset, ARRAY_SIZE(buf) - offset - 1, fmt, args);
-   buf[ARRAY_SIZE(buf)-1] = '\0';
-   ::Log(buf);
-   va_end(args);
-}
+       strcpy_s(buf, "udp | ");
+       offset = strlen(buf);
+       va_start(args, fmt);
+       vsnprintf(buf + offset, ARRAY_SIZE(buf) - offset - 1, fmt, args);
+       buf[ARRAY_SIZE(buf)-1] = '\0';
+       ::Log(buf);
+       va_end(args);
+    }

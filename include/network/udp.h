@@ -5,13 +5,14 @@
  * in the LICENSE file.
  */
 
-#ifndef _UDP_H
-#define _UDP_H
+#pragma once
 
 #include "poll.h"
 #include "udp_msg.h"
 #include "ggponet.h"
 #include "ring_buffer.h"
+
+#include <cstdint>
 
 #define MAX_UDP_ENDPOINTS     16
 
@@ -38,7 +39,7 @@ protected:
 public:
    Udp();
 
-   void Init(uint16 port, Poll *p, Callbacks *callbacks);
+   void Init(uint16_t port, Poll *p, Callbacks *callbacks);
    
    void SendTo(char *buffer, int len, int flags, struct sockaddr *dst, int destlen);
 
@@ -55,5 +56,3 @@ protected:
    Callbacks      *_callbacks;
    Poll           *_poll;
 };
-
-#endif

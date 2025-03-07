@@ -9,7 +9,7 @@
 
 SpectatorBackend::SpectatorBackend(GGPOSessionCallbacks *cb,
                                    const char* gamename,
-                                   uint16 localport,
+                                   uint16_t localport,
                                    int num_players,
                                    int input_size,
                                    char *hostip,

@@ -64,7 +64,12 @@ set(
 )
 
 set(
-	CMAKE_ARCHIVE_OUTPUT_DIRECTORY 
+	CMAKE_ARCHIVE_OUTPUT_DIRECTORY #static lib
+	${OUTPUT_DIR}
+)
+
+set(
+	CMAKE_LIBRARY_OUTPUT_DIRECTORY #dynamic linkable
 	${OUTPUT_DIR}
 )
 

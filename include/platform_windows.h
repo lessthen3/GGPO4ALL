@@ -5,8 +5,9 @@
  * in the LICENSE file.
  */
 
-#ifndef _GGPO_WINDOWS_H_
-#define _GGPO_WINDOWS_H_
+#pragma once
+
+#if defined(_WIN32) or defined(_WIN64)
 
 #include <winsock2.h>
 #include <ws2tcpip.h>

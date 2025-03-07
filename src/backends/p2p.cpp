@@ -13,7 +13,7 @@ static const int DEFAULT_DISCONNECT_NOTIFY_START   = 750;
 
 Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks *cb,
                                    const char *gamename,
-                                   uint16 localport,
+                                   uint16_t localport,
                                    int num_players,
                                    int input_size) :
     _num_players(num_players),
@@ -62,7 +62,7 @@ Peer2PeerBackend::~Peer2PeerBackend()
 
 void
 Peer2PeerBackend::AddRemotePlayer(char *ip,
-                                  uint16 port,
+                                  uint16_t port,
                                   int queue)
 {
    /*
@@ -77,7 +77,7 @@ Peer2PeerBackend::AddRemotePlayer(char *ip,
 }
 
 GGPOErrorCode Peer2PeerBackend::AddSpectator(char *ip,
-                                             uint16 port)
+                                             uint16_t port)
 {
    if (_num_spectators == GGPO_MAX_SPECTATORS) {
       return GGPO_ERRORCODE_TOO_MANY_SPECTATORS;

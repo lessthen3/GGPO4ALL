@@ -5,8 +5,7 @@
  * in the LICENSE file.
  */
 
-#ifndef _P2P_H
-#define _P2P_H
+#pragma once
 
 #include "types.h"
 #include "poll.h"
@@ -17,7 +16,7 @@
 
 class Peer2PeerBackend : public IQuarkBackend, IPollSink, Udp::Callbacks {
 public:
-   Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16 localport, int num_players, int input_size);
+   Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16_t localport, int num_players, int input_size);
    virtual ~Peer2PeerBackend();
 
 
@@ -46,8 +45,8 @@ protected:
    void CheckInitialSync(void);
    int Poll2Players(int current_frame);
    int PollNPlayers(int current_frame);
-   void AddRemotePlayer(char *remoteip, uint16 reportport, int queue);
-   GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
+   void AddRemotePlayer(char *remoteip, uint16_t reportport, int queue);
+   GGPOErrorCode AddSpectator(char *remoteip, uint16_t reportport);
    virtual void OnSyncEvent(Sync::Event &e) { }
    virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, GGPOPlayerHandle handle);
    virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, int queue);
@@ -73,5 +72,3 @@ protected:
 
    UdpMsg::connect_status _local_connect_status[UDP_MSG_MAX_PLAYERS];
 };
-
-#endif

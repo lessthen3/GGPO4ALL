@@ -7,7 +7,7 @@
 
 #pragma once
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) or defined(__APPLE__)
 
 #include <stdio.h>
 #include <stdarg.h>

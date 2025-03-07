@@ -5,23 +5,34 @@
  * in the LICENSE file.
  */
 
+#if defined(_WIN32) or defined(_WIN64)
+
 #include "platform_windows.h"
 
 int
-Platform::GetConfigInt(const char* name)
-{
-   char buf[1024];
-   if (GetEnvironmentVariable(name, buf, ARRAY_SIZE(buf)) == 0) {
-      return 0;
-   }
-   return atoi(buf);
-}
+    Platform::GetConfigInt(const char* name)
+    {
+       char buf[1024];
 
-bool Platform::GetConfigBool(const char* name)
-{
-   char buf[1024];
-   if (GetEnvironmentVariable(name, buf, ARRAY_SIZE(buf)) == 0) {
-      return false;
-   }
-   return atoi(buf) != 0 || _stricmp(buf, "true") == 0;
-}
+       if (GetEnvironmentVariable(name, buf, ARRAY_SIZE(buf)) == 0) 
+       {
+          return 0;
+       }
+
+       return atoi(buf);
+    }
+
+bool 
+    Platform::GetConfigBool(const char* name)
+    {
+       char buf[1024];
+
+       if (GetEnvironmentVariable(name, buf, ARRAY_SIZE(buf)) == 0)
+       {
+          return false;
+       }
+
+       return atoi(buf) != 0 || _stricmp(buf, "true") == 0;
+    }
+
+#endif //Windows OS Check

@@ -5,8 +5,7 @@
  * in the LICENSE file.
  */
 
-#ifndef _TYPES_H
-#define _TYPES_H
+#pragma once
 /*
  * Keep the compiler happy
  */
@@ -36,7 +35,7 @@ typedef int int32;
 /*
  * Additional headers
  */
-#if defined(_WINDOWS)
+#if defined(_WIN32)
 #  include "platform_windows.h"
 #elif defined(__GNUC__)
 #  include "platform_linux.h"
@@ -81,4 +80,3 @@ typedef int int32;
 #  define MIN(x, y)        (((x) < (y)) ? (x) : (y))
 #endif
 
-#endif // _TYPES_H
