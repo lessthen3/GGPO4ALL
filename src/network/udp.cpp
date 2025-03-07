@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "../include/types.h"
+#include "../include/platform_common.h"
 #include "../include/network/udp.h"
 
 SOCKET
@@ -79,33 +79,33 @@ Udp::SendTo(char *buffer, int len, int flags, struct sockaddr *dst, int destlen)
 }
 
 bool
-Udp::OnLoopPoll(void *cookie)
-{
-   uint8          recv_buf[MAX_UDP_PACKET_SIZE];
-   sockaddr_in    recv_addr;
-   int            recv_addr_len;
+    Udp::OnLoopPoll(void *cookie)
+    {
+       uint8_t          recv_buf[MAX_UDP_PACKET_SIZE];
+       sockaddr_in    recv_addr;
+       int            recv_addr_len;
 
-   for (;;) {
-      recv_addr_len = sizeof(recv_addr);
-      int len = recvfrom(_socket, (char *)recv_buf, MAX_UDP_PACKET_SIZE, 0, (struct sockaddr *)&recv_addr, &recv_addr_len);
+       for (;;) {
+          recv_addr_len = sizeof(recv_addr);
+          int len = recvfrom(_socket, (char *)recv_buf, MAX_UDP_PACKET_SIZE, 0, (struct sockaddr *)&recv_addr, &recv_addr_len);
 
-      // TODO: handle len == 0... indicates a disconnect.
+          // TODO: handle len == 0... indicates a disconnect.
 
-      if (len == -1) {
-         int error = WSAGetLastError();
-         if (error != WSAEWOULDBLOCK) {
-            Log("recvfrom WSAGetLastError returned %d (%x).\n", error, error);
-         }
-         break;
-      } else if (len > 0) {
-         char src_ip[1024];
-         Log("recvfrom returned (len:%d  from:%s:%d).\n", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port) );
-         UdpMsg *msg = (UdpMsg *)recv_buf;
-         _callbacks->OnMsg(recv_addr, msg, len);
-      } 
-   }
-   return true;
-}
+          if (len == -1) {
+             int error = WSAGetLastError();
+             if (error != WSAEWOULDBLOCK) {
+                Log("recvfrom WSAGetLastError returned %d (%x).\n", error, error);
+             }
+             break;
+          } else if (len > 0) {
+             char src_ip[1024];
+             Log("recvfrom returned (len:%d  from:%s:%d).\n", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port) );
+             UdpMsg *msg = (UdpMsg *)recv_buf;
+             _callbacks->OnMsg(recv_addr, msg, len);
+          } 
+       }
+       return true;
+    }
 
 
 void

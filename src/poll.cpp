@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "types.h"
+#include "platform_common.h"
 #include "poll.h"
 
 Poll::Poll(void) :

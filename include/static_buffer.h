@@ -5,29 +5,31 @@
  * in the LICENSE file.
  */
 
-#ifndef _STATIC_BUFFER_H
-#define _STATIC_BUFFER_H
+#pragma once
 
-#include <types.h>
+#include <platform_common.h>
 
 template<class T, int N> class StaticBuffer
 {
 public:
-   StaticBuffer<T, N>() :
-      _size(0) {
+   StaticBuffer<T, N>() : _size(0) 
+   {
    } 
 
-   T& operator[](int i) {
+   T& operator[](int i) 
+   {
       ASSERT(i >= 0 && i < _size);
       return _elements[i];
    }
 
-   void push_back(const T &t) {
+   void push_back(const T &t) 
+   {
       ASSERT(_size != (N-1));
       _elements[_size++] = t;
    }
 
-   int size() {
+   int size() 
+   {
       return _size;
    }
 
@@ -36,5 +38,3 @@ protected:
    T        _elements[N];
    int      _size;
 };
-
-#endif

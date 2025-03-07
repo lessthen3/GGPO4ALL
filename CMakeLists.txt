@@ -78,6 +78,7 @@ set(
 file(
 	GLOB_RECURSE 
 	GGPO4ALL_SOURCES 
+	CONFIGURE_DEPENDS
 	"src/*.cpp" 
 	"include/*.h"
 )

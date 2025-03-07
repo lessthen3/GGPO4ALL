@@ -5,10 +5,9 @@
  * in the LICENSE file.
  */
 
-#ifndef _SYNCTEST_H
-#define _SYNCTEST_H
+#pragma once
 
-#include "types.h"
+#include "platform_common.h"
 #include "backend.h"
 #include "sync.h"
 #include "ring_buffer.h"
@@ -54,6 +53,4 @@ protected:
    GameInput                  _last_input;
    RingBuffer<SavedInfo, 32>  _saved_frames;
 };
-
-#endif
 

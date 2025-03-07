@@ -5,10 +5,9 @@
  * in the LICENSE file.
  */
 
-#ifndef _TIMESYNC_H
-#define _TIMESYNC_H
+#pragma once
 
-#include "types.h"
+#include "platform_common.h"
 #include "game_input.h"
 
 #define FRAME_WINDOW_SIZE           40
@@ -30,5 +29,3 @@ protected:
    GameInput   _last_inputs[MIN_UNIQUE_FRAMES];
    int         _next_prediction;
 };
-
-#endif

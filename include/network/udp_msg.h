@@ -5,8 +5,7 @@
  * in the LICENSE file.
  */
 
-#ifndef _UDP_MSG_H
-#define _UDP_MSG_H
+#pragma once
 
 #define MAX_COMPRESSED_BITS       4096
 #define UDP_MSG_MAX_PLAYERS          4
@@ -32,41 +31,41 @@ struct UdpMsg
    };
 
    struct {
-      uint16         magic;
-      uint16         sequence_number;
-      uint8          type;            /* packet type */
+      uint16_t         magic;
+      uint16_t         sequence_number;
+      uint8_t          type;            /* packet type */
    } hdr;
    union {
       struct {
-         uint32      random_request;  /* please reply back with this random data */
-         uint16      remote_magic;
-         uint8       remote_endpoint;
+         uint32_t      random_request;  /* please reply back with this random data */
+         uint16_t      remote_magic;
+         uint8_t       remote_endpoint;
       } sync_request;
       
       struct {
-         uint32      random_reply;    /* OK, here's your random data back */
+         uint32_t      random_reply;    /* OK, here's your random data back */
       } sync_reply;
       
       struct {
-         int8        frame_advantage; /* what's the other guy's frame advantage? */
-         uint32      ping;
+         int8_t        frame_advantage; /* what's the other guy's frame advantage? */
+         uint32_t      ping;
       } quality_report;
       
       struct {
-         uint32      pong;
+         uint32_t      pong;
       } quality_reply;
 
       struct {
          connect_status    peer_connect_status[UDP_MSG_MAX_PLAYERS];
 
-         uint32            start_frame;
+         uint32_t            start_frame;
 
          int               disconnect_requested:1;
          int               ack_frame:31;
 
-         uint16            num_bits;
-         uint8             input_size; // XXX: shouldn't be in every single packet!
-         uint8             bits[MAX_COMPRESSED_BITS]; /* must be last */
+         uint16_t            num_bits;
+         uint8_t             input_size; // XXX: shouldn't be in every single packet!
+         uint8_t             bits[MAX_COMPRESSED_BITS]; /* must be last */
       } input;
 
       struct {
@@ -99,9 +98,7 @@ public:
       return 0;
    }
 
-   UdpMsg(MsgType t) { hdr.type = (uint8)t; }
+   UdpMsg(MsgType t) { hdr.type = (uint8_t)t; }
 };
 
 #pragma pack(pop)
-
-#endif   

@@ -5,8 +5,7 @@
  * in the LICENSE file.
  */
 
-#ifndef _GGPONET_H_
-#define _GGPONET_H_
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -562,6 +561,4 @@ GGPO_API void __cdecl ggpo_logv(GGPOSession *,
 
 #ifdef __cplusplus
 };
-#endif
-
 #endif

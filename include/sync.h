@@ -5,10 +5,9 @@
  * in the LICENSE file.
  */
 
-#ifndef _SYNC_H
-#define _SYNC_H
+#pragma once
 
-#include "types.h"
+#include "platform_common.h"
 #include "ggponet.h"
 #include "game_input.h"
 #include "input_queue.h"
@@ -55,8 +54,19 @@ public:
    void AdjustSimulation(int seek_to);
    void IncrementFrame(void);
 
-   int GetFrameCount() { return _framecount; }
-   bool InRollback() { return _rollingback; }
+   int 
+       GetFrameCount() 
+       const
+   { 
+       return _framecount; 
+   }
+
+   bool 
+       InRollback() 
+       const
+   { 
+       return _rollingback; 
+   }
 
    bool GetEvent(Event &e);
 
@@ -99,6 +109,4 @@ protected:
    RingBuffer<Event, 32> _event_queue;
    UdpMsg::connect_status *_local_connect_status;
 };
-
-#endif
 

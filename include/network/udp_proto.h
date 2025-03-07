@@ -18,12 +18,13 @@
 class UdpProtocol : public IPollSink
 {
 public:
-   struct Stats {
+   struct Stats 
+   {
       int                 ping;
       int                 remote_frame_advantage;
       int                 local_frame_advantage;
       int                 send_queue_len;
-      Udp::Stats          udp;
+      Udp::Stats        udp;
    };
 
    struct Event {
@@ -66,9 +67,6 @@ public:
 
    void Synchronize();
    bool GetPeerConnectStatus(int id, int *frame);
-   bool IsInitialized() { return _udp != NULL; }
-   bool IsSynchronized() { return _current_state == Running; }
-   bool IsRunning() { return _current_state == Running; }
    void SendInput(GameInput &input);
    void SendInputAck();
    bool HandlesMsg(sockaddr_in &from, UdpMsg *msg);
@@ -84,14 +82,36 @@ public:
    void SetDisconnectTimeout(int timeout);
    void SetDisconnectNotifyStart(int timeout);
 
+   bool IsInitialized() 
+   { 
+       return _udp != NULL; 
+   }
+
+   bool 
+       IsSynchronized() 
+       const
+   { 
+       return _current_state == Running; 
+   }
+
+   bool 
+       IsRunning() 
+       const
+   { 
+       return _current_state == Running; 
+   }
+
 protected:
-   enum State {
+   enum State 
+   {
       Syncing,
       Synchronzied,
       Running,
       Disconnected
    };
-   struct QueueEntry {
+
+   struct QueueEntry 
+   {
       int         queue_time;
       sockaddr_in dest_addr;
       UdpMsg      *msg;
@@ -110,7 +130,7 @@ protected:
    void SendSyncRequest();
    void SendMsg(UdpMsg *msg);
    void PumpSendQueue();
-   void DispatchMsg(uint8 *buffer, int len);
+   void DispatchMsg(uint8_t *buffer, int len); //?????????????????????????????????
    void SendPendingOutput();
    bool OnInvalid(UdpMsg *msg, int len);
    bool OnSyncRequest(UdpMsg *msg, int len);

@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "types.h"
+#include "platform_common.h"
 #include "poll.h"
 #include "sync.h"
 #include "backend.h"

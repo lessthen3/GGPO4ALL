@@ -5,8 +5,7 @@
  * in the LICENSE file.
  */
 
-#ifndef _LOG_H
-#define _LOG_H
+#pragma once
 
 extern void Log(const char *fmt, ...);
 extern void Logv(const char *fmt, va_list list);
@@ -14,4 +13,3 @@ extern void Logv(FILE *fp, const char *fmt, va_list args);
 extern void LogFlush();
 extern void LogFlushOnLog(bool flush);
 
-#endif

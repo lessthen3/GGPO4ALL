@@ -5,25 +5,25 @@
  * in the LICENSE file.
  */
 
-#include "types.h"
+#include "platform_common.h"
 #include "bitvector.h"
 
 void
-    BitVector_SetBit(uint8* vector, int* offset)
+    BitVector_SetBit(uint8_t* vector, int* offset)
     {
        vector[(*offset) / 8] |= (1 << ((*offset) % 8));
        *offset += 1;
     }
 
 void
-    BitVector_ClearBit(uint8* vector, int* offset)
+    BitVector_ClearBit(uint8_t* vector, int* offset)
     {
        vector[(*offset) / 8] &= ~(1 << ((*offset) % 8));
        *offset += 1;
     }
 
 void
-    BitVector_WriteNibblet(uint8* vector, int nibble, int* offset)
+    BitVector_WriteNibblet(uint8_t* vector, int nibble, int* offset)
     {
        ASSERT(nibble < (1 << BITVECTOR_NIBBLE_SIZE));
 
@@ -41,7 +41,7 @@ void
     }
 
 int
-    BitVector_ReadBit(uint8* vector, int* offset)
+    BitVector_ReadBit(uint8_t* vector, int* offset)
     {
        int retval = !!(vector[(*offset) / 8] & (1 << ((*offset) % 8)));
        *offset += 1;
@@ -49,7 +49,7 @@ int
     }
 
 int
-    BitVector_ReadNibblet(uint8* vector, int* offset)
+    BitVector_ReadNibblet(uint8_t* vector, int* offset)
     {
        int nibblet = 0;
 

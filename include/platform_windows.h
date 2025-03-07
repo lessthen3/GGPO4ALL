@@ -13,16 +13,31 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <stdio.h>
-#include "types.h"
+
+#include <cstdint>
+
+#include "macros.h"
 
 class Platform {
 public:  // types
    typedef DWORD ProcessID;
 
 public:  // functions
-   static ProcessID GetProcessID() { return GetCurrentProcessId(); }
-   static void AssertFailed(char *msg) { MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION); }
-   static uint32 GetCurrentTimeMS() { return timeGetTime(); }
+   static ProcessID GetProcessID() 
+   { 
+	   return GetCurrentProcessId(); 
+   }
+
+   static void AssertFailed(char *msg) 
+   { 
+	   MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION); 
+   }
+
+   static uint32_t GetCurrentTimeMS()
+   { 
+	   return timeGetTime(); 
+   }
+
    static int GetConfigInt(const char* name);
    static bool GetConfigBool(const char* name);
 };

@@ -5,7 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "../include/types.h"
+#include "../include/platform_common.h"
 #include "../include/network/udp_proto.h"
 #include "../include/bitvector.h"
 

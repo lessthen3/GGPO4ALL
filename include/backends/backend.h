@@ -5,11 +5,10 @@
  * in the LICENSE file.
  */
 
-#ifndef _BACKEND_H
-#define _BACKEND_H
+#pragma once
 
 #include "ggponet.h"
-#include "types.h"
+#include "platform_common.h"
 
 struct GGPOSession {
    virtual ~GGPOSession() { }
@@ -29,6 +28,4 @@ struct GGPOSession {
 };
 
 typedef struct GGPOSession Quark, IQuarkBackend; /* XXX: nuke this */
-
-#endif
 
