@@ -58,16 +58,20 @@ bool
 Sync::AddLocalInput(int queue, GameInput &input)
 {
    int frames_behind = _framecount - _last_confirmed_frame; 
-   if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
-      Log("Rejecting input from emulator: reached prediction barrier.\n");
+
+   if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) 
+   {
+       logger->LogAndPrint("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", "info");
       return false;
    }
 
-   if (_framecount == 0) {
+   if (_framecount == 0) 
+   {
       SaveCurrentFrame();
    }
 
-   Log("Sending undelayed local frame %d to queue %d.\n", _framecount, queue);
+   logger->LogAndPrint(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", "info");
+
    input.frame = _framecount;
    _input_queues[queue].AddInput(input);
 
@@ -75,13 +79,13 @@ Sync::AddLocalInput(int queue, GameInput &input)
 }
 
 void
-Sync::AddRemoteInput(int queue, GameInput &input)
+    Sync::AddRemoteInput(int queue, GameInput &input)
 {
    _input_queues[queue].AddInput(input);
 }
 
 int
-Sync::GetConfirmedInputs(void *values, int size, int frame)
+    Sync::GetConfirmedInputs(void* values, int size, int frame)
 {
    int disconnect_flags = 0;
    char *output = (char *)values;
@@ -89,12 +93,17 @@ Sync::GetConfirmedInputs(void *values, int size, int frame)
    ASSERT(size >= _config.num_players * _config.input_size);
 
    memset(output, 0, size);
-   for (int i = 0; i < _config.num_players; i++) {
+
+   for (int i = 0; i < _config.num_players; i++) 
+   {
       GameInput input;
-      if (_local_connect_status[i].disconnected && frame > _local_connect_status[i].last_frame) {
+      if (_local_connect_status[i].disconnected && frame > _local_connect_status[i].last_frame) 
+      {
          disconnect_flags |= (1 << i);
          input.erase();
-      } else {
+      } 
+      else 
+      {
          _input_queues[i].GetConfirmedInput(frame, &input);
       }
       memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
@@ -103,7 +112,7 @@ Sync::GetConfirmedInputs(void *values, int size, int frame)
 }
 
 int
-Sync::SynchronizeInputs(void *values, int size)
+    Sync::SynchronizeInputs(void* values, int size)
 {
    int disconnect_flags = 0;
    char *output = (char *)values;
@@ -111,12 +120,17 @@ Sync::SynchronizeInputs(void *values, int size)
    ASSERT(size >= _config.num_players * _config.input_size);
 
    memset(output, 0, size);
-   for (int i = 0; i < _config.num_players; i++) {
+   for (int i = 0; i < _config.num_players; i++) 
+   {
       GameInput input;
-      if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame) {
+
+      if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame)
+      {
          disconnect_flags |= (1 << i);
          input.erase();
-      } else {
+      } 
+      else 
+      {
          _input_queues[i].GetInput(_framecount, &input);
       }
       memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
@@ -125,28 +139,29 @@ Sync::SynchronizeInputs(void *values, int size)
 }
 
 void
-Sync::CheckSimulation(int timeout)
+    Sync::CheckSimulation(int timeout)
 {
    int seek_to;
-   if (!CheckSimulationConsistency(&seek_to)) {
+   if (not CheckSimulationConsistency(&seek_to)) 
+   {
       AdjustSimulation(seek_to);
    }
 }
 
 void
-Sync::IncrementFrame(void)
+    Sync::IncrementFrame(void)
 {
    _framecount++;
    SaveCurrentFrame();
 }
 
 void
-Sync::AdjustSimulation(int seek_to)
+    Sync::AdjustSimulation(int seek_to)
 {
    int framecount = _framecount;
    int count = _framecount - seek_to;
 
-   Log("Catching up\n");
+   logger->LogAndPrint("Catching up", "sync.cpp", "info");
    _rollingback = true;
 
    /*
@@ -167,15 +182,16 @@ Sync::AdjustSimulation(int seek_to)
 
    _rollingback = false;
 
-   Log("---\n");   
+   logger->LogAndPrint("---\n", "sync.cpp", "info");
 }
 
 void
-Sync::LoadFrame(int frame)
+    Sync::LoadFrame(int frame)
 {
    // find the frame in question
-   if (frame == _framecount) {
-      Log("Skipping NOP.\n");
+   if (frame == _framecount) 
+   {
+      logger->LogAndPrint("Skipping NOP.", "sync.cpp", "info");
       return;
    }
 
@@ -183,10 +199,10 @@ Sync::LoadFrame(int frame)
    _savedstate.head = FindSavedFrameIndex(frame);
    SavedFrame *state = _savedstate.frames + _savedstate.head;
 
-   Log("=== Loading frame info %d (size: %d  checksum: %08x).\n",
-       state->frame, state->cbuf, state->checksum);
+   logger->LogAndPrint(format("=== Loading frame info {} (size: {}  checksum: {}).", state->frame, state->cbuf, state->checksum), "sync.cpp", "info");
 
    ASSERT(state->buf && state->cbuf);
+
    _callbacks.load_game_state(state->buf, state->cbuf);
 
    // Reset framecount and the head of the state ring-buffer to point in
@@ -196,108 +212,130 @@ Sync::LoadFrame(int frame)
 }
 
 void
-Sync::SaveCurrentFrame()
+    Sync::SaveCurrentFrame()
 {
    /*
     * See StateCompress for the real save feature implemented by FinalBurn.
     * Write everything into the head, then advance the head pointer.
     */
    SavedFrame *state = _savedstate.frames + _savedstate.head;
-   if (state->buf) {
+
+   if (state->buf) 
+   {
       _callbacks.free_buffer(state->buf);
       state->buf = NULL;
    }
+
    state->frame = _framecount;
    _callbacks.save_game_state(&state->buf, &state->cbuf, &state->checksum, state->frame);
 
-   Log("=== Saved frame info %d (size: %d  checksum: %08x).\n", state->frame, state->cbuf, state->checksum);
+   logger->LogAndPrint(format("=== Saved frame info {} (size: {}  checksum: {}).", state->frame, state->cbuf, state->checksum), "sync.cpp", "info");
    _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
 }
 
 Sync::SavedFrame&
-Sync::GetLastSavedFrame()
+    Sync::GetLastSavedFrame()
 {
    int i = _savedstate.head - 1;
-   if (i < 0) {
+
+   if (i < 0) 
+   {
       i = ARRAY_SIZE(_savedstate.frames) - 1;
    }
+
    return _savedstate.frames[i];
 }
 
 
 int
-Sync::FindSavedFrameIndex(int frame)
+    Sync::FindSavedFrameIndex(int frame)
 {
    int i, count = ARRAY_SIZE(_savedstate.frames);
-   for (i = 0; i < count; i++) {
-      if (_savedstate.frames[i].frame == frame) {
+
+   for (i = 0; i < count; i++) 
+   {
+      if (_savedstate.frames[i].frame == frame) 
+      {
          break;
       }
    }
-   if (i == count) {
+   if (i == count) 
+   {
       ASSERT(FALSE);
    }
+
    return i;
 }
 
 
 bool
-Sync::CreateQueues(Config &config)
+    Sync::CreateQueues(Config& config)
 {
    delete [] _input_queues;
    _input_queues = new InputQueue[_config.num_players];
 
-   for (int i = 0; i < _config.num_players; i++) {
+   for (int i = 0; i < _config.num_players; i++) 
+   {
       _input_queues[i].Init(i, _config.input_size);
    }
+
    return true;
 }
 
 bool
-Sync::CheckSimulationConsistency(int *seekTo)
+    Sync::CheckSimulationConsistency(int* seekTo)
 {
    int first_incorrect = GameInput::NullFrame;
-   for (int i = 0; i < _config.num_players; i++) {
-      int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-      Log("considering incorrect frame %d reported by queue %d.\n", incorrect, i);
 
-      if (incorrect != GameInput::NullFrame && (first_incorrect == GameInput::NullFrame || incorrect < first_incorrect)) {
+   for (int i = 0; i < _config.num_players; i++) 
+   {
+      int incorrect = _input_queues[i].GetFirstIncorrectFrame();
+      logger->LogAndPrint(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", "info");
+
+      if (incorrect != GameInput::NullFrame and (first_incorrect == GameInput::NullFrame or incorrect < first_incorrect)) 
+      {
          first_incorrect = incorrect;
       }
    }
 
-   if (first_incorrect == GameInput::NullFrame) {
-      Log("prediction ok.  proceeding.\n");
+   if (first_incorrect == GameInput::NullFrame) 
+   {
+       logger->LogAndPrint("prediction ok.  proceeding.", "sync.cpp", "info");
       return true;
    }
+
    *seekTo = first_incorrect;
+
    return false;
 }
 
 void
-Sync::SetFrameDelay(int queue, int delay)
+    Sync::SetFrameDelay(int queue, int delay)
 {
    _input_queues[queue].SetFrameDelay(delay);
 }
 
 
 void
-Sync::ResetPrediction(int frameNumber)
+    Sync::ResetPrediction(int frameNumber)
 {
-   for (int i = 0; i < _config.num_players; i++) {
+   for (int i = 0; i < _config.num_players; i++) 
+   {
       _input_queues[i].ResetPrediction(frameNumber);
    }
 }
 
 
 bool
-Sync::GetEvent(Event &e)
+    Sync::GetEvent(Event& e)
 {
-   if (_event_queue.size()) {
+   if (_event_queue.size()) 
+   {
       e = _event_queue.front();
       _event_queue.pop();
       return true;
    }
+
    return false;
 }
 

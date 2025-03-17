@@ -21,14 +21,29 @@
  */
 #pragma warning(disable: 4018 4100 4127 4201 4389 4800)
 
+#include "LogManager.h"
+#include <format>
+
+
+LogManager* logger = &LogManager::GGPO_LOGGER();
+
  // Platform-Specific Includes
 #if defined(_WIN32) || defined(_WIN64)
-#include "platform_windows.h"
+	#include "platform_windows.h"
 #elif defined(__linux__) || defined(__APPLE__)
-#include "platform_linux.h"
+	#include "platform_linux.h"
 #else
-#error Unsupported platform!
+	#error Unsupported platform!
 #endif
 
-#include "log.h"
+#define ASSERT(x)                                           
+   //do {                                                     
+   //   if (!(x)) {                                           
+   //      //char assert_buf[1024];                             
+   //      snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #x, __FILE__, __LINE__, Platform::GetProcessID()); \
+   //      //LogManager::GGPO_LOGGER().LogAndPrint(to_string(assert_buf), "", "");                           
+   //      Platform::AssertFailed(assert_buf);                
+   //      exit(0);                                           
+   //   }                                                     
+   //} while (false)
 

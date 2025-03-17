@@ -7,27 +7,9 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdarg.h>
 
-// On windows, export at build time and import at runtime.
-// ELF systems don't need an explicit export/import.
-#ifdef _WIN32
-#  if defined(GGPO_SHARED_LIB)
-#  ifdef GGPO_SDK_EXPORT
-#       define GGPO_API __declspec(dllexport)
-#     else
-#       define GGPO_API __declspec(dllimport)
-#     endif
-#  else
-#     define GGPO_API
-#  endif
-#else
-#  define GGPO_API
-#endif
+#define GGPO_API
 
 #define GGPO_MAX_PLAYERS                  4
 #define GGPO_MAX_PREDICTION_FRAMES        8
@@ -39,7 +21,8 @@ typedef struct GGPOSession GGPOSession;
 
 typedef int GGPOPlayerHandle;
 
-typedef enum {
+typedef enum 
+{
    GGPO_PLAYERTYPE_LOCAL,
    GGPO_PLAYERTYPE_REMOTE,
    GGPO_PLAYERTYPE_SPECTATOR,
@@ -69,7 +52,8 @@ typedef enum {
  *
  */
 
-typedef struct GGPOPlayer {
+typedef struct GGPOPlayer 
+{
    int               size;
    GGPOPlayerType    type;
    int               player_num;
@@ -83,7 +67,8 @@ typedef struct GGPOPlayer {
    } u;
 } GGPOPlayer;
 
-typedef struct GGPOLocalEndpoint {
+typedef struct GGPOLocalEndpoint
+{
    int      player_num;
 } GGPOLocalEndpoint;
 
@@ -142,7 +127,8 @@ typedef enum {
  * the GGPOEvent object indicates how many frames the client is.
  *
  */
-typedef enum {
+typedef enum 
+{
    GGPO_EVENTCODE_CONNECTED_TO_PEER            = 1000,
    GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER      = 1001,
    GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER       = 1002,
@@ -158,95 +144,101 @@ typedef enum {
  * by the on_event callback.  See GGPOEventCode, above, for a detailed
  * explanation of each event.
  */
-typedef struct {
+struct GGPOEvent 
+{
+   GGPOEvent() = default;
+
    GGPOEventCode code;
-   union {
-      struct {
+
+   union 
+   {
+      struct connected
+      {
          GGPOPlayerHandle  player;
-      } connected;
-      struct {
+      };
+      struct synchronizing 
+      {
          GGPOPlayerHandle  player;
          int               count;
          int               total;
-      } synchronizing;
-      struct {
+      };
+      struct synchronized 
+      {
          GGPOPlayerHandle  player;
-      } synchronized;
-      struct {
+      };
+      struct disconnected 
+      {
          GGPOPlayerHandle  player;
-      } disconnected;
-      struct {
+      };
+      struct timesync 
+      {
          int               frames_ahead;
-      } timesync;
-      struct {
+      };
+      struct connection_interrupted 
+      {
          GGPOPlayerHandle  player;
          int               disconnect_timeout;
-      } connection_interrupted;
-      struct {
+      };
+      struct connection_resumed 
+      {
          GGPOPlayerHandle  player;
-      } connection_resumed;
+      };
    } u;
-} GGPOEvent;
+};
 
 /*
  * The GGPOSessionCallbacks structure contains the callback functions that
  * your application must implement.  GGPO.net will periodically call these
  * functions during the game.  All callback functions must be implemented.
  */
-typedef struct {
-   /*
-    * begin_game callback - This callback has been deprecated.  You must
-    * implement it, but should ignore the 'game' parameter.
-    */
-   bool (__cdecl *begin_game)(const char *game);
+struct GGPOSessionCallbacks 
+{
+    /*
+     * begin_game callback - This callback has been deprecated.  You must
+     * implement it, but should ignore the 'game' parameter.
+     */
+    bool (*begin_game)(const char* game);
 
-   /*
-    * save_game_state - The client should allocate a buffer, copy the
-    * entire contents of the current game state into it, and copy the
-    * length into the *len parameter.  Optionally, the client can compute
-    * a checksum of the data and store it in the *checksum argument.
-    */
-   bool (__cdecl *save_game_state)(unsigned char **buffer, int *len, int *checksum, int frame);
+    /*
+     * save_game_state - The client should allocate a buffer, copy the
+     * entire contents of the current game state into it, and copy the
+     * length into the *len parameter.  Optionally, the client can compute
+     * a checksum of the data and store it in the *checksum argument.
+     */
+    bool (*save_game_state)(unsigned char** buffer, int* len, int* checksum, int frame);
 
-   /*
-    * load_game_state - GGPO.net will call this function at the beginning
-    * of a rollback.  The buffer and len parameters contain a previously
-    * saved state returned from the save_game_state function.  The client
-    * should make the current game state match the state contained in the
-    * buffer.
-    */
-   bool (__cdecl *load_game_state)(unsigned char *buffer, int len);
+    /*
+     * load_game_state - GGPO.net will call this function at the beginning
+     * of a rollback.  The buffer and len parameters contain a previously
+     * saved state returned from the save_game_state function.  The client
+     * should make the current game state match the state contained in the
+     * buffer.
+     */
+    bool (*load_game_state)(unsigned char* buffer, int len);
 
-   /*
-    * log_game_state - Used in diagnostic testing.  The client should use
-    * the ggpo_log function to write the contents of the specified save
-    * state in a human readible form.
-    */
-   bool (__cdecl *log_game_state)(char *filename, unsigned char *buffer, int len);
+    /*
+     * free_buffer - Frees a game state allocated in save_game_state.  You
+     * should deallocate the memory contained in the buffer.
+     */
+    void (*free_buffer)(void* buffer);
 
-   /*
-    * free_buffer - Frees a game state allocated in save_game_state.  You
-    * should deallocate the memory contained in the buffer.
-    */
-   void (__cdecl *free_buffer)(void *buffer);
+    /*
+     * advance_frame - Called during a rollback.  You should advance your game
+     * state by exactly one frame.  Before each frame, call ggpo_synchronize_input
+     * to retrieve the inputs you should use for that frame.  After each frame,
+     * you should call ggpo_advance_frame to notify GGPO.net that you're
+     * finished.
+     *
+     * The flags parameter is reserved.  It can safely be ignored at this time.
+     */
+    bool (*advance_frame)(int flags);
 
-   /*
-    * advance_frame - Called during a rollback.  You should advance your game
-    * state by exactly one frame.  Before each frame, call ggpo_synchronize_input
-    * to retrieve the inputs you should use for that frame.  After each frame,
-    * you should call ggpo_advance_frame to notify GGPO.net that you're
-    * finished.
-    *
-    * The flags parameter is reserved.  It can safely be ignored at this time.
-    */
-   bool (__cdecl *advance_frame)(int flags);
-
-   /* 
-    * on_event - Notification that something has happened.  See the GGPOEventCode
-    * structure above for more information.
-    */
-   bool (__cdecl *on_event)(GGPOEvent *info);
-} GGPOSessionCallbacks;
+    /*
+     * on_event - Notification that something has happened.  See the GGPOEventCode
+     * structure above for more information.
+     */
+    bool (*on_event)(GGPOEvent* info);
+};
 
 /*
  * The GGPONetworkStats function contains some statistics about the current
@@ -282,7 +274,8 @@ typedef struct {
  * calculated from the perspective of the remote player.
  *
  */
-typedef struct GGPONetworkStats {
+struct GGPONetworkStats 
+{
    struct {
       int   send_queue_len;
       int   recv_queue_len;
@@ -293,7 +286,7 @@ typedef struct GGPONetworkStats {
       int   local_frames_behind;
       int   remote_frames_behind;
    } timesync;
-} GGPONetworkStats;
+};
 
 /*
  * ggpo_start_session --
@@ -318,12 +311,16 @@ typedef struct GGPONetworkStats {
  *
  * local_port - The port GGPO should bind to for UDP traffic.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_start_session(GGPOSession **session,
-                                                  GGPOSessionCallbacks *cb,
-                                                  const char *game,
-                                                  int num_players,
-                                                  int input_size,
-                                                  unsigned short localport);
+GGPO_API GGPOErrorCode  
+    ggpo_start_session
+    (
+        GGPOSession **session,
+        GGPOSessionCallbacks *cb,
+        const char *game,
+        int num_players,
+        int input_size,
+        unsigned short localport
+    );
 
 
 /*
@@ -337,9 +334,13 @@ GGPO_API GGPOErrorCode __cdecl ggpo_start_session(GGPOSession **session,
  * handle - An out parameter to a handle used to identify this player in the future.
  * (e.g. in the on_event callbacks).
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_add_player(GGPOSession *session,
-                                               GGPOPlayer *player,
-                                               GGPOPlayerHandle *handle);
+GGPO_API GGPOErrorCode  
+    ggpo_add_player
+    (
+        GGPOSession* session,
+        GGPOPlayer* player,
+        GGPOPlayerHandle* handle
+    );
 
 
 /*
@@ -366,12 +367,16 @@ GGPO_API GGPOErrorCode __cdecl ggpo_add_player(GGPOSession *session,
  * recommended value is 1.
  *
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_start_synctest(GGPOSession **session,
-                                                   GGPOSessionCallbacks *cb,
-                                                   char *game,
-                                                   int num_players,
-                                                   int input_size,
-                                                   int frames);
+GGPO_API GGPOErrorCode  
+    ggpo_start_synctest
+    (
+        GGPOSession** session,
+        GGPOSessionCallbacks* cb,
+        char* game,
+        int num_players,
+        int input_size,
+        int frames
+    );
 
 
 /*
@@ -398,21 +403,26 @@ GGPO_API GGPOErrorCode __cdecl ggpo_start_synctest(GGPOSession **session,
  *
  * host_port - The port of the session on the host
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_start_spectating(GGPOSession **session,
-                                                     GGPOSessionCallbacks *cb,
-                                                     const char *game,
-                                                     int num_players,
-                                                     int input_size,
-                                                     unsigned short local_port,
-                                                     char *host_ip,
-                                                     unsigned short host_port);
+GGPO_API GGPOErrorCode  
+    ggpo_start_spectating
+    (
+        GGPOSession** session,
+        GGPOSessionCallbacks* cb,
+        const char* game,
+        int num_players,
+        int input_size,
+        unsigned short local_port,
+        char* host_ip,
+        unsigned short host_port
+    );
 
 /*
  * ggpo_close_session --
  * Used to close a session.  You must call ggpo_close_session to
  * free the resources allocated in ggpo_start_session.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_close_session(GGPOSession *);
+GGPO_API GGPOErrorCode  
+    ggpo_close_session(GGPOSession *);
 
 
 /*
@@ -421,9 +431,13 @@ GGPO_API GGPOErrorCode __cdecl ggpo_close_session(GGPOSession *);
  * Change the amount of frames ggpo will delay local input.  Must be called
  * before the first call to ggpo_synchronize_input.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_set_frame_delay(GGPOSession *,
-                                                    GGPOPlayerHandle player,
-                                                    int frame_delay);
+GGPO_API GGPOErrorCode  
+    ggpo_set_frame_delay
+    (
+        GGPOSession*,
+        GGPOPlayerHandle player,
+        int frame_delay
+    );
 
 /*
  * ggpo_idle --
@@ -434,7 +448,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_set_frame_delay(GGPOSession *,
  * timeout - The amount of time GGPO.net is allowed to spend in this function,
  * in milliseconds.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_idle(GGPOSession *,
+GGPO_API GGPOErrorCode  ggpo_idle(GGPOSession *,
                                          int timeout);
 
 /*
@@ -452,10 +466,14 @@ GGPO_API GGPOErrorCode __cdecl ggpo_idle(GGPOSession *,
  * size - The size of the controller inputs.  This must be exactly equal to the
  * size passed into ggpo_start_session.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_add_local_input(GGPOSession *,
-                                                    GGPOPlayerHandle player,
-                                                    void *values,
-                                                    int size);
+GGPO_API GGPOErrorCode  
+    ggpo_add_local_input
+    (
+        GGPOSession *,
+        GGPOPlayerHandle player,
+        void *values,
+        int size
+    );
 
 /*
  * ggpo_synchronize_input --
@@ -474,7 +492,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_add_local_input(GGPOSession *,
  * that player will be zeroed and the i-th flag will be set.  For example,
  * if only player 3 has disconnected, disconnect flags will be 8 (i.e. 1 << 3).
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_synchronize_input(GGPOSession *,
+GGPO_API GGPOErrorCode  ggpo_synchronize_input(GGPOSession *,
                                                       void *values,
                                                       int size,
                                                       int *disconnect_flags);
@@ -485,7 +503,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_synchronize_input(GGPOSession *,
  * Disconnects a remote player from a game.  Will return GGPO_ERRORCODE_PLAYER_DISCONNECTED
  * if you try to disconnect a player who has already been disconnected.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_disconnect_player(GGPOSession *,
+GGPO_API GGPOErrorCode  ggpo_disconnect_player(GGPOSession *,
                                                       GGPOPlayerHandle player);
 
 /*
@@ -496,7 +514,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_disconnect_player(GGPOSession *,
  * you advance the gamestate by a frame, even during rollbacks.  GGPO.net
  * may call your save_state callback before this function returns.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_advance_frame(GGPOSession *);
+GGPO_API GGPOErrorCode  ggpo_advance_frame(GGPOSession *);
 
 /*
  * ggpo_get_network_stats --
@@ -508,7 +526,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_advance_frame(GGPOSession *);
  *
  * stats - Out parameter to the network statistics.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_get_network_stats(GGPOSession *,
+GGPO_API GGPOErrorCode  ggpo_get_network_stats(GGPOSession *,
                                                       GGPOPlayerHandle player,
                                                       GGPONetworkStats *stats);
 
@@ -524,7 +542,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_get_network_stats(GGPOSession *,
  *
  * timeout - The time in milliseconds to wait before disconnecting a peer.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_set_disconnect_timeout(GGPOSession *,
+GGPO_API GGPOErrorCode  ggpo_set_disconnect_timeout(GGPOSession *,
                                                            int timeout);
 
 /*
@@ -536,7 +554,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_set_disconnect_timeout(GGPOSession *,
  * timeout - The amount of time which needs to elapse without receiving a packet
  *           before the GGPO_EVENTCODE_NETWORK_INTERRUPTED event is sent.
  */
-GGPO_API GGPOErrorCode __cdecl ggpo_set_disconnect_notify_start(GGPOSession *,
+GGPO_API GGPOErrorCode  ggpo_set_disconnect_notify_start(GGPOSession *,
                                                                 int timeout);
 
 /*
@@ -547,7 +565,7 @@ GGPO_API GGPOErrorCode __cdecl ggpo_set_disconnect_notify_start(GGPOSession *,
  * variable is set to 1.  This will change in future versions of the
  * SDK.
  */
-GGPO_API void __cdecl ggpo_log(GGPOSession *,
+GGPO_API void  ggpo_log(GGPOSession *,
                                const char *fmt, ...);
 /*
  * ggpo_logv --
@@ -555,10 +573,7 @@ GGPO_API void __cdecl ggpo_log(GGPOSession *,
  * A varargs compatible version of ggpo_log.  See ggpo_log for
  * more details.
  */
-GGPO_API void __cdecl ggpo_logv(GGPOSession *,
+GGPO_API void  ggpo_logv(GGPOSession *,
                                 const char *fmt,
                                 va_list args);
 
-#ifdef __cplusplus
-};
-#endif

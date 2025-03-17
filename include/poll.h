@@ -5,8 +5,7 @@
  * in the LICENSE file.
  */
 
-#ifndef _POLL_H
-#define _POLL_H
+#pragma once
 
 #include "static_buffer.h"
 
@@ -60,5 +59,3 @@ protected:
    StaticBuffer<PollSinkCb, 16>          _loop_sinks;
    StaticBuffer<PollPeriodicSinkCb, 16>  _periodic_sinks;
 };
-
-#endif

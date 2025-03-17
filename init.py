@@ -10,7 +10,11 @@ def CreateColouredText(fp_SampleText: str, fp_DesiredColour: str) -> str:
     f_ListOfColours = {
         "black": '\033[30m', "red": '\033[31m', "green": '\033[32m',
         "yellow": '\033[33m', "blue": '\033[34m', "magenta": '\033[35m',
-        "cyan": '\033[36m', "white": '\033[37m'
+        "cyan": '\033[36m', "white": '\033[37m',
+
+        "bright black": '\033[90m', "bright red": '\033[91m', "bright green": '\033[92m',
+        "bright yellow": '\033[93m', "bright blue": '\033[94m', "bright magenta": '\033[95m',
+        "bright cyan": '\033[96m', "bright white": '\033[97m'
     }
 
     if fp_DesiredColour not in f_ListOfColours:
@@ -41,12 +45,23 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
 
     f_GeneratorMap = {
         "vs2022": "Visual Studio 17 2022",
+        "vs2019": "Visual Studio 16 2019",
+        "vs2017": "Visual Studio 15 2017",
+        "vs2015": "Visual Studio 14 2015",
+
         "xcode": "Xcode",
-        "ninja": "Ninja",
+
+        "ninja": "Ninja", #everything under here is untested so uh goodluck w that uwu
         "ninja-mc": "Ninja Multi-Config",
+
         "unix": "Unix Makefiles",
-        "unix-cd": "CodeBlocks - Unix Makefiles",
-        "unix-eclipse": "Eclipse CDT4 - Unix Makefiles"
+        "unix-cb": "CodeBlocks - Unix Makefiles",
+        "unix-eclipse": "Eclipse CDT4 - Unix Makefiles",
+
+        "mingw": "MinGW Makefiles",
+        "msys": "MSYS Makefiles",
+        "nmake": "NMake Makefiles",
+        "nmake-jom": "NMake Makefiles JOM"
     }
 
     if fp_Generator not in f_GeneratorMap:
@@ -54,7 +69,7 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
         return False
     
     #Determine if we need `--config`
-    f_IsMultiConfig = fp_Generator in ["vs2022", "xcode", "ninja-mc"]
+    f_IsMultiConfig = fp_Generator in ["vs2022", "vs2019", "vs2017", "vs2015", "xcode", "ninja-mc"]
 
     f_CMakeConfigCommand = ['cmake', '-S', '.', '-B', 'build', '-G', f_GeneratorMap[fp_Generator]]
 
@@ -144,14 +159,16 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
 
         print(CreateColouredText("[SUCCESS]: Release build completed!", "cyan"))
 
+    print(CreateColouredText("[INFO]: Your CMake project should be good to go!", "green"))
+
     return True
 
 def main() -> bool:
 
-    usage_message = "init.py --[build_type: release, debug or both] -G [desired_generator]"
+    usage_message = CreateColouredText("init.py ", 'bright magenta') + CreateColouredText("--[build_type: release, debug or both] ", "bright blue") + CreateColouredText("-G [desired_generator]", "blue")
 
     parser = argparse.ArgumentParser(
-        description=CreateColouredText('Used for Building GGPO4ALL from Source', 'magenta'), 
+        description=CreateColouredText('Used for Building GGPO4ALL from Source', 'bright green'), 
         usage=usage_message, 
         add_help=True,
         formatter_class=argparse.RawTextHelpFormatter
@@ -160,38 +177,44 @@ def main() -> bool:
     parser.add_argument(
         '--release', 
         action='store_true', 
-        help=CreateColouredText('Used for a release build', 'magenta')
+        help=CreateColouredText('Used for a release build', 'bright magenta')
     )
 
     parser.add_argument(
         '--debug', 
         action='store_true', 
-        help=CreateColouredText('Used for a debug build', 'magenta')
+        help=CreateColouredText('Used for a debug build', 'bright magenta')
     )
 
     parser.add_argument(
         '--both', 
         action='store_true', 
-        help=CreateColouredText('Used to build both a debug and release build', 'magenta')
+        help=CreateColouredText('Used to build both a debug and release build', 'bright magenta')
     )
 
     parser.add_argument(
-        '-G', 
+        ('-G'), 
         nargs=1,
         metavar="[generator]",
-        help=CreateColouredText('Used to set the project file generator, options are as follows:', 'magenta') + "\n" + \
-                "\t" + CreateColouredText('-G vs2022 ', 'blue') + CreateColouredText('Generates solution for Visual Studio 17 2022', 'cyan') + "\n" + \
+        help=CreateColouredText('Used to set the project file generator, options are as follows:', 'bright magenta') + "\n" + \
+                "\t" + CreateColouredText('-G vs2015 --> vs2022 ', 'blue') + CreateColouredText('Generates solution for Visual Studio 2015 - 2022', 'cyan') + "\n" + \
+                
                 "\t" + CreateColouredText('-G xcode ', 'blue') + CreateColouredText('Generates project files for Xcode', 'cyan') + "\n" + \
+                
                 "\t" + CreateColouredText('-G ninja ', 'blue') + CreateColouredText('Generates project files using Ninja', 'cyan') + "\n" + \
                 "\t" + CreateColouredText('-G ninja-mc ', 'blue') + CreateColouredText('For Ninja Multi-Config', 'cyan') + "\n" + \
+                
                 "\t" + CreateColouredText('-G unix ', 'blue') + CreateColouredText('For Unix Makefiles', 'cyan') + "\n" + \
                 "\t" + CreateColouredText('-G unix-eclipse ', 'blue') + CreateColouredText('Generate Unix Makefiles for Eclipse CDT', 'cyan') + "\n" + \
-                "\t" + CreateColouredText('-G unix-cd ', 'blue') + CreateColouredText('Generates Unix Makefiles for CodeBlocks', 'cyan')
+                "\t" + CreateColouredText('-G unix-cb ', 'blue') + CreateColouredText('Generates Unix Makefiles for CodeBlocks', 'cyan') + "\n" + \
+
+                "\t" + CreateColouredText('-G mingw ', 'blue') + CreateColouredText('Generates MinGW Makefiles', 'cyan') + "\n" + \
+                "\t" + CreateColouredText('-G msys ', 'blue') + CreateColouredText('Generates MSYS Makefiles', 'cyan') + "\n" + \
+                "\t" + CreateColouredText('-G nmake ', 'blue') + CreateColouredText('Generates NMake Makefiles', 'cyan') + "\n" + \
+                "\t" + CreateColouredText('-G nmake-jom ', 'blue') + CreateColouredText('Generates JOM Makefiles', 'cyan')
     )   
     
     args = parser.parse_args()
-
-    f_IsSetupSuccessful = False
 
     if(not args.debug and not args.release and not args.both):
         print(CreateColouredText("[ERROR]: No valid build type input detected, use -h or --help if you're unfamiliar", "red"))
@@ -205,27 +228,18 @@ def main() -> bool:
 
     if(args.debug):
 
-        f_IsSetupSuccessful = run_cmake("debug", f_DesiredGenerator)
-
-        if f_IsSetupSuccessful:
-            print(CreateColouredText("CMakeLists.txt succesfully read and compiled for debug, your CMake project should be good to go!", "green"))
+        if not run_cmake("debug", f_DesiredGenerator):
+            return False
         
     elif(args.release):
 
-        f_IsSetupSuccessful = run_cmake("release", f_DesiredGenerator)
-
-        if f_IsSetupSuccessful:
-            print(CreateColouredText("CMakeLists.txt succesfully read and compiled for release, your CMake project should be good to go!", "green"))
+        if not run_cmake("release", f_DesiredGenerator):
+            return False
 
     elif(args.both):
 
-        f_IsSetupSuccessful = run_cmake("both", f_DesiredGenerator)
-        
-        if f_IsSetupSuccessful:
-            print(CreateColouredText("CMakeLists.txt succesfully read and compiled for debug and release, your CMake project should be good to go!", "green"))
-
-    if not f_IsSetupSuccessful:
-        return False
+        if not run_cmake("both", f_DesiredGenerator):
+            return False
 
     print(CreateColouredText("done!", "magenta"))
     return True

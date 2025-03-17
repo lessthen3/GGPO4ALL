@@ -34,7 +34,7 @@ public:  // functions
 	   return getpid(); 
    }
 
-   static void AssertFailed(const char* msg) { }
+   static void AssertFailed(const char* msg) { } //idek ill figure out whether i like the MessageBoxA thing from windows i feel like regular assert is fine but whatever
    static uint32_t GetCurrentTimeMS();
 };
 

@@ -5,15 +5,15 @@
  * in the LICENSE file.
  */
 
-#ifndef _INPUT_QUEUE_H
-#define _INPUT_QUEUE_H
+#pragma once
 
 #include "game_input.h"
 
 #define INPUT_QUEUE_LENGTH    128
 #define DEFAULT_INPUT_SIZE      4
 
-class InputQueue {
+class InputQueue 
+{
 public:
    InputQueue(int input_size = DEFAULT_INPUT_SIZE);
    ~InputQueue();
@@ -53,8 +53,6 @@ protected:
    GameInput            _inputs[INPUT_QUEUE_LENGTH];
    GameInput            _prediction;
 };
-
-#endif
 
 
 

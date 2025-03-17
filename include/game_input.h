@@ -5,8 +5,9 @@
  * in the LICENSE file.
  */
 
-#ifndef _GAMEINPUT_H
-#define _GAMEINPUT_H
+#pragma once
+
+#include "platform_common.h"
 
 #include <stdio.h>
 #include <memory.h>
@@ -25,16 +26,26 @@ struct GameInput {
    int      size; /* size in bytes of the entire input for all players */
    char     bits[GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS];
 
-   bool is_null() { return frame == NullFrame; }
+   bool 
+       is_null() 
+       const
+   { 
+       return frame == NullFrame; 
+   }
+
+   void 
+       erase()
+   {
+       memset(bits, 0, sizeof(bits));
+   }
+
    void init(int frame, char *bits, int size, int offset);
    void init(int frame, char *bits, int size);
    bool value(int i) const { return (bits[i/8] & (1 << (i%8))) != 0; }
    void set(int i) { bits[i/8] |= (1 << (i%8)); }
    void clear(int i) { bits[i/8] &= ~(1 << (i%8)); }
-   void erase() { memset(bits, 0, sizeof(bits)); }
+
    void desc(char *buf, size_t buf_size, bool show_frame = true) const;
    void log(char *prefix, bool show_frame = true) const;
    bool equal(GameInput &input, bool bitsonly = false);
 };
-
-#endif

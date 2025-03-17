@@ -18,7 +18,8 @@
 
 #include "macros.h"
 
-class Platform {
+class Platform 
+{
 public:  // types
    typedef DWORD ProcessID;
 
@@ -28,7 +29,7 @@ public:  // functions
 	   return GetCurrentProcessId(); 
    }
 
-   static void AssertFailed(char *msg) 
+   static void AssertFailed(char* msg) 
    { 
 	   MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION); 
    }

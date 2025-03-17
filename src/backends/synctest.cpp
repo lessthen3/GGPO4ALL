@@ -65,42 +65,55 @@ SyncTestBackend::AddPlayer(GGPOPlayer *player, GGPOPlayerHandle *handle)
 }
 
 GGPOErrorCode
-SyncTestBackend::AddLocalInput(GGPOPlayerHandle player, void *values, int size)
+    SyncTestBackend::AddLocalInput(GGPOPlayerHandle player, void *values, int size)
 {
-   if (!_running) {
+   if (not _running)
+   {
       return GGPO_ERRORCODE_NOT_SYNCHRONIZED;
    }
 
    int index = (int)player;
-   for (int i = 0; i < size; i++) {
+
+   for (int i = 0; i < size; i++) 
+   {
       _current_input.bits[(index * size) + i] |= ((char *)values)[i];
    }
+
    return GGPO_OK;
 }
 
 GGPOErrorCode
-SyncTestBackend::SyncInput(void *values,
-                           int size,
-                           int *disconnect_flags)
+    SyncTestBackend::SyncInput
+    (
+        void *values,
+        int size,
+        int *disconnect_flags
+    )
 {
    BeginLog(false);
-   if (_rollingback) {
+
+   if (_rollingback) //HERES THE THING
+   {
       _last_input = _saved_frames.front().input;
-   } else {
-      if (_sync.GetFrameCount() == 0) {
+   } 
+   else 
+   {
+      if (_sync.GetFrameCount() == 0)
+      {
          _sync.SaveCurrentFrame();
       }
       _last_input = _current_input;
    }
    memcpy(values, _last_input.bits, size);
-   if (disconnect_flags) {
+   if (disconnect_flags)
+   {
       *disconnect_flags = 0;
    }
    return GGPO_OK;
 }
 
 GGPOErrorCode
-SyncTestBackend::IncrementFrame(void)
+    SyncTestBackend::IncrementFrame(void)
 {  
    _sync.IncrementFrame();
    _current_input.erase();
@@ -125,13 +138,16 @@ SyncTestBackend::IncrementFrame(void)
    info.checksum = _sync.GetLastSavedFrame().checksum;
    _saved_frames.push(info);
 
-   if (frame - _last_verified == _check_distance) {
+   if (frame - _last_verified == _check_distance)
+   {
       // We've gone far enough ahead and should now start replaying frames.
       // Load the last verified frame and set the rollback flag to true.
       _sync.LoadFrame(_last_verified);
 
       _rollingback = true;
-      while(!_saved_frames.empty()) {
+
+      while(!_saved_frames.empty()) 
+      {
          _callbacks.advance_frame(0);
 
          // Verify that the checksumn of this frame is the same as the one in our
@@ -139,14 +155,19 @@ SyncTestBackend::IncrementFrame(void)
          info = _saved_frames.front();
          _saved_frames.pop();
 
-         if (info.frame != _sync.GetFrameCount()) {
+         if (info.frame != _sync.GetFrameCount())
+         {
             RaiseSyncError("Frame number %d does not match saved frame number %d", info.frame, frame);
          }
+
          int checksum = _sync.GetLastSavedFrame().checksum;
-         if (info.checksum != checksum) {
+
+         if (info.checksum != checksum) 
+         {
             LogSaveStates(info);
             RaiseSyncError("Checksum for frame %d does not match saved (%d != %d)", frame, checksum, info.checksum);
          }
+
          printf("Checksum %08d for frame %d matches.\n", checksum, info.frame);
          free(info.buf);
       }
@@ -158,7 +179,7 @@ SyncTestBackend::IncrementFrame(void)
 }
 
 void
-SyncTestBackend::RaiseSyncError(const char *fmt, ...)
+    SyncTestBackend::RaiseSyncError(const char *fmt, ...)
 {
    char buf[1024];
    va_list args;
@@ -173,7 +194,7 @@ SyncTestBackend::RaiseSyncError(const char *fmt, ...)
 }
 
 GGPOErrorCode
-SyncTestBackend::Logv(char *fmt, va_list list)
+    SyncTestBackend::Logv(char *fmt, va_list list)
 {
    if (_logfp) {
       vfprintf(_logfp, fmt, list);
@@ -182,7 +203,7 @@ SyncTestBackend::Logv(char *fmt, va_list list)
 }
 
 void
-SyncTestBackend::BeginLog(int saving)
+    SyncTestBackend::BeginLog(int saving)
 {
    EndLog();
 
@@ -197,7 +218,7 @@ SyncTestBackend::BeginLog(int saving)
 }
 
 void
-SyncTestBackend::EndLog()
+    SyncTestBackend::EndLog()
 {
    if (_logfp) {
       fprintf(_logfp, "Closing log file.\n");
@@ -206,7 +227,7 @@ SyncTestBackend::EndLog()
    }
 }
 void
-SyncTestBackend::LogSaveStates(SavedInfo &info)
+    SyncTestBackend::LogSaveStates(SavedInfo &info)
 {
    char filename[MAX_PATH];
    sprintf_s(filename, ARRAY_SIZE(filename), "synclogs\\state-%04d-original.log", _sync.GetFrameCount());

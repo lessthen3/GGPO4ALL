@@ -85,6 +85,8 @@ file(
 
 ####################################### Library Target
 
+# STATIC LIBRARY
+
 add_library(
 	${PROJECT_NAME} STATIC 
 	${GGPO4ALL_SOURCES}
@@ -94,6 +96,22 @@ target_include_directories(
 	${PROJECT_NAME} PUBLIC 
 	"include"
 )
+
+# SHARED LIBRARY idk this isnt working and i dont feel like getting it to work xd
+
+# add_library(
+# 	${PROJECT_NAME}_shared SHARED 
+# 	${GGPO4ALL_SOURCES}
+# )
+
+# target_include_directories(
+# 	${PROJECT_NAME}_shared PUBLIC 
+# 	"include"
+# )
+
+# if(WIN32)
+#     target_compile_definitions(${PROJECT_NAME}_shared PRIVATE GGPO4ALL_DLL_EXPORT)
+# endif()
 
 ####################################### Build Message
 

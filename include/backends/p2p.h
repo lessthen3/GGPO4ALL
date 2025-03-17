@@ -14,7 +14,8 @@
 #include "timesync.h"
 #include "network/udp_proto.h"
 
-class Peer2PeerBackend : public IQuarkBackend, IPollSink, Udp::Callbacks {
+class Peer2PeerBackend : public IQuarkBackend, IPollSink, Udp::Callbacks 
+{
 public:
    Peer2PeerBackend(GGPOSessionCallbacks *cb, const char *gamename, uint16_t localport, int num_players, int input_size);
    virtual ~Peer2PeerBackend();

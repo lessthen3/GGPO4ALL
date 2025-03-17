@@ -18,22 +18,28 @@
 
 class SyncTestBackend;
 
-class Sync {
+class Sync 
+{
 public:
-   struct Config {
+   struct Config 
+   {
       GGPOSessionCallbacks    callbacks;
       int                     num_prediction_frames;
       int                     num_players;
       int                     input_size;
    };
-   struct Event {
-      enum {
+   struct Event 
+   {
+      enum 
+      {
          ConfirmedInput,
       } type;
-      union {
-         struct {
+      union 
+      {
+         struct confirmedInput
+         {
             GameInput   input;
-         } confirmedInput;
+         };
       } u;
    };
 
@@ -73,14 +79,16 @@ public:
 protected:
    friend SyncTestBackend;
 
-   struct SavedFrame {
-      byte    *buf;
+   struct SavedFrame 
+   {
+      unsigned char* buf;
       int      cbuf;
       int      frame;
       int      checksum;
       SavedFrame() : buf(NULL), cbuf(0), frame(-1), checksum(0) { }
    };
-   struct SavedState {
+   struct SavedState 
+   {
       SavedFrame frames[MAX_PREDICTION_FRAMES + 2];
       int head;
    };
@@ -104,7 +112,7 @@ protected:
    int            _framecount;
    int            _max_prediction_frames;
 
-   InputQueue     *_input_queues;
+   InputQueue* _input_queues;
 
    RingBuffer<Event, 32> _event_queue;
    UdpMsg::connect_status *_local_connect_status;

@@ -5,7 +5,6 @@
  * in the LICENSE file.
  */
 
-#include "types.h"
 #include "backends/p2p.h"
 #include "backends/synctest.h"
 #include "backends/spectator.h"
@@ -196,7 +195,7 @@ GGPOErrorCode ggpo_start_spectating(GGPOSession **session,
                                     char *host_ip,
                                     unsigned short host_port)
 {
-   *session= (GGPOSession *)new SpectatorBackend(cb,
+   *session = (GGPOSession*) new SpectatorBackend(cb,
                                                  game,
                                                  local_port,
                                                  num_players,

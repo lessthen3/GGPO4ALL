@@ -12,29 +12,54 @@
 #include "ggponet.h"
 #include "ring_buffer.h"
 
-#include <cstdint>
+#if defined(_WIN32) || defined(_WIN64)
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
 
-#define MAX_UDP_ENDPOINTS     16
+    typedef SOCKET GGPO_SOCKET;
+    #define GGPO_INVALID_SOCKET (SOCKET)(~0)
+
+    #define GGPO_GET_LAST_ERROR() WSAGetLastError()
+    #define GGPO_CLOSE_SOCKET(__arg) closesocket(__arg)
+    #define GGPO_SOCKET_ERROR_CODE WSAEWOULDBLOCK
+#else
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+    #include <errno.h>
+
+
+    typedef uint64_t GGPO_SOCKET;
+    #define GGPO_INVALID_SOCKET (-1)
+
+    #define GGPO_GET_LAST_ERROR() errno
+    #define GGPO_CLOSE_SOCKET(__arg) close(__arg)
+    #define GGPO_SOCKET_ERROR_CODE EWOULDBLOCK
+#endif
+
+constexpr auto GGPO_SOCKET_ERROR (-1);
+constexpr auto MAX_UDP_ENDPOINTS (16);
 
 static const int MAX_UDP_PACKET_SIZE = 4096;
 
 class Udp : public IPollSink
 {
 public:
-   struct Stats {
+   struct Stats 
+   {
       int      bytes_sent;
       int      packets_sent;
       float    kbps_sent;
    };
 
-   struct Callbacks {
+   struct Callbacks 
+   {
       virtual ~Callbacks() { }
       virtual void OnMsg(sockaddr_in &from, UdpMsg *msg, int len) = 0;
    };
-
-
-protected:
-   void Log(const char *fmt, ...);
 
 public:
    Udp();
@@ -50,9 +75,10 @@ public:
 
 protected:
    // Network transmission information
-   SOCKET         _socket;
+    GGPO_SOCKET _socket;
 
    // state management
-   Callbacks      *_callbacks;
-   Poll           *_poll;
+   Callbacks* _callbacks;
+   Poll* _poll;
+
 };

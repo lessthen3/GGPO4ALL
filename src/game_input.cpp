@@ -5,9 +5,7 @@
  * in the LICENSE file.
  */
 
-#include "types.h"
 #include "game_input.h"
-#include "log.h"
 
 void
     GameInput::init
