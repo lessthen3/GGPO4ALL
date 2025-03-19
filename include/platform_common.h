@@ -1,49 +1,122 @@
-/* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
+﻿/*******************************************************************
+ *                                             GGPO4ALL v0.0.1
+ *Created by Ranyodh Mandur - � 2024 and GroundStorm Studios, LLC. - � 2009
  *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
+ *                         Licensed under the MIT License (MIT).
+ *                  For more details, see the LICENSE file or visit:
+ *                        https://opensource.org/licenses/MIT
+ *
+ *              GGPO4ALL is an open-source rollback netcode library
+********************************************************************/
 
 #pragma once
-/*
- * Keep the compiler happy
- */
 
-/*
- * Disable specific compiler warnings
- *   4018 - '<' : signed/unsigned mismatch
- *   4100 - 'xxx' : unreferenced formal parameter
- *   4127 - conditional expression is constant
- *   4201 - nonstandard extension used : nameless struct/union
- *   4389 - '!=' : signed/unsigned mismatch
- *   4800 - 'int' : forcing value to bool 'true' or 'false' (performance warning)
- */
-#pragma warning(disable: 4018 4100 4127 4201 4389 4800)
+ /*
+  * Macros
+  */
 
-#include "LogManager.h"
-#include <format>
+#ifndef ARRAY_SIZE
+#  define ARRAY_SIZE(a)    (sizeof(a) / sizeof((a)[0]))
+#endif
 
+#ifndef MAX_INT
+#  define MAX_INT          0xEFFFFFF
+#endif
 
-extern LogManager* logger;
+#ifndef MAX
+#  define MAX(x, y)        (((x) > (y)) ? (x) : (y))
+#endif
 
- // Platform-Specific Includes
-#if defined(_WIN32) || defined(_WIN64)
-	#include "platform_windows.h"
-#elif defined(__linux__) || defined(__APPLE__)
-	#include "platform_linux.h"
-#else
-	#error Unsupported platform!
+#ifndef MIN
+#  define MIN(x, y)        (((x) < (y)) ? (x) : (y))
 #endif
 
 #define ASSERT(x)                                           
-   //do {                                                     
-   //   if (!(x)) {                                           
-   //      //char assert_buf[1024];                             
-   //      snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #x, __FILE__, __LINE__, Platform::GetProcessID()); \
+ //do {                                                     
+ //   if (!(x)) {                                           
+ //      //char assert_buf[1024];                             
+ //      snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #x, __FILE__, __LINE__, Platform::GetProcessID()); \
    //      //LogManager::GGPO_LOGGER().LogAndPrint(to_string(assert_buf), "", "");                           
    //      Platform::AssertFailed(assert_buf);                
    //      exit(0);                                           
    //   }                                                     
    //} while (false)
+
+#include "LogManager.h"
+#include <format>
+
+extern LogManager* logger;
+
+ // Platform-Specific Includes
+#if defined(_WIN32) || defined(_WIN64)
+
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+	#include <windows.h>
+	#include <stdio.h>
+
+	#include <cstdint>
+
+	#include <timeapi.h> //apparently i need this idk where i took it out but i did tho lmfao
+
+	class Platform
+	{
+	public:  // types
+		typedef DWORD ProcessID;
+
+	public:  // functions
+		static ProcessID GetProcessID()
+		{
+			return GetCurrentProcessId();
+		}
+
+		static void AssertFailed(char* msg)
+		{
+			MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+		}
+
+		static uint32_t GetCurrentTimeMS()
+		{
+			return timeGetTime();
+		}
+
+		static int GetConfigInt(const char* name);
+		static bool GetConfigBool(const char* name);
+	};
+
+#elif defined(__linux__) or defined(__APPLE__)
+
+	#include <time.h>
+	#include <cstdint>
+
+	#include <stdio.h>
+	#include <stdarg.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <fcntl.h>
+	#include <unistd.h>
+	#include <stdlib.h>
+
+	class Platform 
+	{
+	public:  // types
+		typedef pid_t ProcessID;
+
+	public:  // functions
+		static ProcessID GetProcessID()
+		{
+			return getpid();
+		}
+
+		static void AssertFailed(const char* msg) { } //idek ill figure out whether i like the MessageBoxA thing from windows i feel like regular assert is fine but whatever
+		static uint32_t GetCurrentTimeMS();
+	};
+
+#else
+
+	#error Unsupported platform!
+
+#endif
 
