@@ -25,7 +25,7 @@
 #include <format>
 
 
-LogManager* logger = &LogManager::GGPO_LOGGER();
+extern LogManager* logger;
 
  // Platform-Specific Includes
 #if defined(_WIN32) || defined(_WIN64)

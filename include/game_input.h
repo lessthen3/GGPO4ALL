@@ -46,6 +46,5 @@ struct GameInput {
    void clear(int i) { bits[i/8] &= ~(1 << (i%8)); }
 
    void desc(char *buf, size_t buf_size, bool show_frame = true) const;
-   void log(char *prefix, bool show_frame = true) const;
    bool equal(GameInput &input, bool bitsonly = false);
 };

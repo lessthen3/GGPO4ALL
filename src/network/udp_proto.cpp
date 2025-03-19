@@ -205,94 +205,94 @@ bool
 bool
     UdpProtocol::OnLoopPoll(void* cookie)
     {
-       if (not _udp) 
-       {
-          return true;
-       }
+        if (not _udp) 
+        {
+        return true;
+        }
 
-       unsigned int now = Platform::GetCurrentTimeMS();
-       unsigned int next_interval;
+        unsigned int now = Platform::GetCurrentTimeMS();
+        unsigned int next_interval;
 
-       PumpSendQueue();
+        PumpSendQueue();
 
-       switch (_current_state) 
-       {
-           case Syncing:
-              next_interval = (_state.sync.roundtrips_remaining == NUM_SYNC_PACKETS) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
-              if (_last_send_time and _last_send_time + next_interval < now) 
-              {
-                 Log("No luck syncing after %d ms... Re-queueing sync packet.\n", next_interval);
-                 SendSyncRequest();
-              }
-              break;
+        switch (_current_state) 
+        {
+            case Syncing:
+                next_interval = (_state.sync.roundtrips_remaining == NUM_SYNC_PACKETS) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
+                if (_last_send_time and _last_send_time + next_interval < now) 
+                {
+                    logger->LogAndPrint(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp", "info");
+                    SendSyncRequest();
+                }
+                break;
 
-           case Running:
-              // xxx: rig all this up with a timer wrapper
-              if (not _state.running.last_input_packet_recv_time or _state.running.last_input_packet_recv_time + RUNNING_RETRY_INTERVAL < now) 
-              {
-                 Log("Haven't exchanged packets in a while (last received:%d  last sent:%d).  Resending.\n", _last_received_input.frame, _last_sent_input.frame);
-                 SendPendingOutput();
-                 _state.running.last_input_packet_recv_time = now;
-              }
+            case Running:
+                // xxx: rig all this up with a timer wrapper
+                if (not _state.running.last_input_packet_recv_time or _state.running.last_input_packet_recv_time + RUNNING_RETRY_INTERVAL < now) 
+                {
+                    logger->LogAndPrint(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp", "info");
+                    SendPendingOutput();
+                    _state.running.last_input_packet_recv_time = now;
+                }
 
-              if (not _state.running.last_quality_report_time or _state.running.last_quality_report_time + QUALITY_REPORT_INTERVAL < now) 
-              {
-                 UdpMsg* msg = new UdpMsg(UdpMsg::QualityReport);
-                 msg->u.quality_report.ping = Platform::GetCurrentTimeMS();
-                 msg->u.quality_report.frame_advantage = (uint8_t)_local_frame_advantage;
-                 SendMsg(msg);
-                 _state.running.last_quality_report_time = now;
-              }
+                if (not _state.running.last_quality_report_time or _state.running.last_quality_report_time + QUALITY_REPORT_INTERVAL < now) 
+                {
+                    UdpMsg* msg = new UdpMsg(UdpMsg::QualityReport);
+                    msg->u.quality_report.ping = Platform::GetCurrentTimeMS();
+                    msg->u.quality_report.frame_advantage = (uint8_t)_local_frame_advantage;
+                    SendMsg(msg);
+                    _state.running.last_quality_report_time = now;
+                }
 
-              if (not _state.running.last_network_stats_interval or _state.running.last_network_stats_interval + NETWORK_STATS_INTERVAL < now) 
-              {
-                 UpdateNetworkStats();
-                 _state.running.last_network_stats_interval =  now;
-              }
+                if (not _state.running.last_network_stats_interval or _state.running.last_network_stats_interval + NETWORK_STATS_INTERVAL < now) 
+                {
+                    UpdateNetworkStats();
+                    _state.running.last_network_stats_interval =  now;
+                }
 
-              if (_last_send_time and _last_send_time + KEEP_ALIVE_INTERVAL < now) 
-              {
-                 Log("Sending keep alive packet\n");
-                 SendMsg(new UdpMsg(UdpMsg::KeepAlive));
-              }
+                if (_last_send_time and _last_send_time + KEEP_ALIVE_INTERVAL < now) 
+                {
+                    logger->LogAndPrint("Sending keep alive packet", "udp_proto.cpp", "info");
+                    SendMsg(new UdpMsg(UdpMsg::KeepAlive));
+                }
 
-              if 
-              (
-                  _disconnect_timeout and 
-                  _disconnect_notify_start and 
-                  not _disconnect_notify_sent and 
-                  (_last_recv_time + _disconnect_notify_start < now)
-              ) 
-              {
-                 Log("Endpoint has stopped receiving packets for %d ms.  Sending notification.\n", _disconnect_notify_start);
-                 Event e(Event::NetworkInterrupted);
-                 e.u.network_interrupted.disconnect_timeout = _disconnect_timeout - _disconnect_notify_start;
-                 QueueEvent(e);
-                 _disconnect_notify_sent = true;
-              }
+                if 
+                (
+                    _disconnect_timeout and 
+                    _disconnect_notify_start and 
+                    not _disconnect_notify_sent and 
+                    (_last_recv_time + _disconnect_notify_start < now)
+                ) 
+                {
+                    logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp", "info");
+                    Event e(Event::NetworkInterrupted);
+                    e.u.network_interrupted.disconnect_timeout = _disconnect_timeout - _disconnect_notify_start;
+                    QueueEvent(e);
+                    _disconnect_notify_sent = true;
+                }
 
-              if (_disconnect_timeout and (_last_recv_time + _disconnect_timeout < now)) 
-              {
-                 if (not _disconnect_event_sent)
-                 {
-                    Log("Endpoint has stopped receiving packets for %d ms.  Disconnecting.\n", _disconnect_timeout);
-                    QueueEvent(Event(Event::Disconnected));
-                    _disconnect_event_sent = true;
-                 }
-              }
-              break;
+                if (_disconnect_timeout and (_last_recv_time + _disconnect_timeout < now)) 
+                {
+                    if (not _disconnect_event_sent)
+                    {
+                        logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp", "info");
+                        QueueEvent(Event(Event::Disconnected));
+                        _disconnect_event_sent = true;
+                    }
+                }
+                break;
 
-           case Disconnected:
-              if (_shutdown_timeout < now)
-              {
-                 Log("Shutting down udp connection.\n");
-                 _udp = NULL;
-                 _shutdown_timeout = 0;
-              }
-       }
+            case Disconnected:
+                if (_shutdown_timeout < now)
+                {
+                    logger->LogAndPrint("Shutting down udp connection.", "udp_proto.cpp", "info");
+                    _udp = NULL;
+                    _shutdown_timeout = 0;
+                }
+        }
 
-       return true;
-    }
+        return true;
+}
 
 void
     UdpProtocol::Disconnect()
@@ -377,7 +377,7 @@ void
           // Log("checking sequence number -> next - seq : %d - %d = %d\n", seq, _next_recv_seq, skipped);
           if (skipped > MAX_SEQ_DISTANCE) 
           {
-             Log("dropping out of order packet (seq: %d, last seq:%d)\n", seq, _next_recv_seq);
+              logger->LogAndPrint(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp", "info");
              return;
           }
        }
@@ -422,13 +422,20 @@ void
 
        _kbps_sent = int(Bps / 1024);
 
-       Log("Network Stats -- Bandwidth: %.2f KBps   Packets Sent: %5d (%.2f pps)   "
-           "KB Sent: %.2f    UDP Overhead: %.2f %%.\n",
-           _kbps_sent, 
-           _packets_sent,
-           (float)_packets_sent * 1000 / (now - _stats_start_time),
-           total_bytes_sent / 1024.0,
-           udp_overhead);
+       logger->LogAndPrint
+       (
+           format
+           (
+               "Network Stats -- Bandwidth: {} KBps   Packets Sent: {} ({} pps)   " "KB Sent: {}    UDP Overhead: {}.",
+               _kbps_sent,
+               _packets_sent,
+               (float)_packets_sent * 1000 / (now - _stats_start_time),
+               total_bytes_sent / 1024.0,
+               udp_overhead
+            ),
+           "udp_proto.cpp",
+           "info"
+       );
     }
 
 
@@ -458,54 +465,36 @@ bool
     }
 
 void
-    UdpProtocol::Log(const char* fmt, ...)
-    {
-       char buf[1024];
-       size_t offset;
-       va_list args;
-
-       sprintf_s(buf, ARRAY_SIZE(buf), "udpproto%d | ", _queue);
-       offset = strlen(buf);
-       va_start(args, fmt);
-       vsnprintf(buf + offset, ARRAY_SIZE(buf) - offset - 1, fmt, args);
-       buf[ARRAY_SIZE(buf)-1] = '\0';
-       ::Log(buf);
-       va_end(args);
-    }
-
-void
     UdpProtocol::LogMsg(const char* prefix, UdpMsg* msg)
     {
        switch (msg->hdr.type) 
        {
            case UdpMsg::SyncRequest:
-              Log("%s sync-request (%d).\n", prefix,
-                  msg->u.sync_request.random_request);
+               logger->LogAndPrint(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp", "info");
               break;
 
            case UdpMsg::SyncReply:
-              Log("%s sync-reply (%d).\n", prefix,
-                  msg->u.sync_reply.random_reply);
+               logger->LogAndPrint(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp", "info");
               break;
 
            case UdpMsg::QualityReport:
-              Log("%s quality report.\n", prefix);
+               logger->LogAndPrint(format("{} quality report.", prefix), "udp_proto.cpp", "info");
               break;
 
            case UdpMsg::QualityReply:
-              Log("%s quality reply.\n", prefix);
+               logger->LogAndPrint(format("{} quality reply.", prefix), "udp_proto.cpp", "info");
               break;
 
            case UdpMsg::KeepAlive:
-              Log("%s keep alive.\n", prefix);
+               logger->LogAndPrint(format("{} keep alive.", prefix), "udp_proto.cpp", "info");
               break;
 
            case UdpMsg::Input:
-              Log("%s game-compressed-input %d (+ %d bits).\n", prefix, msg->u.input.start_frame, msg->u.input.num_bits);
+               logger->LogAndPrint(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp", "info");
               break;
 
            case UdpMsg::InputAck:
-              Log("%s input ack.\n", prefix);
+               logger->LogAndPrint(format("{} input ack.", prefix), "udp_proto.cpp", "info");
               break;
 
            default:
@@ -519,7 +508,7 @@ void
        switch (evt.type)
        {
        case UdpProtocol::Event::Synchronzied:
-          Log("%s (event: Synchronzied).\n", prefix);
+           logger->LogAndPrint(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp", "info");
           break;
        }
     }
@@ -536,8 +525,7 @@ bool
     {
        if (_remote_magic_number != 0 and msg->hdr.magic != _remote_magic_number)
        {
-          Log("Ignoring sync request from unknown endpoint (%d != %d).\n", 
-               msg->hdr.magic, _remote_magic_number);
+           logger->LogAndPrint(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp", "error");
           return false;
        }
 
@@ -553,14 +541,13 @@ bool
     {
        if (_current_state != Syncing) 
        {
-          Log("Ignoring SyncReply while not synching.\n");
+           logger->LogAndPrint("Ignoring SyncReply while not synching.", "udp_proto.cpp", "info");
           return msg->hdr.magic == _remote_magic_number;
        }
 
        if (msg->u.sync_reply.random_reply != _state.sync.random)
        {
-          Log("sync reply %d != %d.  Keep looking...\n",
-              msg->u.sync_reply.random_reply, _state.sync.random);
+           logger->LogAndPrint(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp", "info");
           return false;
        }
 
@@ -570,11 +557,11 @@ bool
           _connected = true;
        }
 
-       Log("Checking sync state (%d round trips remaining).\n", _state.sync.roundtrips_remaining);
+       logger->LogAndPrint(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp", "info");
 
        if (--_state.sync.roundtrips_remaining == 0) 
        {
-          Log("Synchronized!\n");
+           logger->LogAndPrint("Synchronized!", "udp_proto.cpp", "info");
           QueueEvent(UdpProtocol::Event(UdpProtocol::Event::Synchronzied));
           _current_state = Running;
           _last_received_input.frame = -1;
@@ -604,7 +591,7 @@ bool
        {
           if (_current_state != Disconnected and not _disconnect_event_sent) 
           {
-             Log("Disconnecting endpoint on remote request.\n");
+              logger->LogAndPrint("Disconnecting endpoint on remote request.", "udp_proto.cpp", "info");
              QueueEvent(Event(Event::Disconnected));
              _disconnect_event_sent = true;
           }
@@ -696,13 +683,13 @@ bool
 
                 _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
 
-                Log("Sending frame %d to emu queue %d (%s).\n", _last_received_input.frame, _queue, desc);
+                logger->LogAndPrint(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp", "info");
                 QueueEvent(evt);
 
              } 
              else 
              {
-                Log("Skipping past frame:(%d) current is %d.\n", currentFrame, _last_received_input.frame);
+                 logger->LogAndPrint(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp", "info");
              }
 
              /*
@@ -719,7 +706,7 @@ bool
         */
        while (_pending_output.size() and _pending_output.front().frame < msg->u.input.ack_frame) 
        {
-          Log("Throwing away pending output frame %d\n", _pending_output.front().frame);
+           logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.front().frame), "udp_proto.cpp", "info");
           _last_acked_input = _pending_output.front();
           _pending_output.pop();
        }
@@ -735,7 +722,7 @@ bool
         */
        while (_pending_output.size() and _pending_output.front().frame < msg->u.input_ack.ack_frame) 
        {
-          Log("Throwing away pending output frame %d\n", _pending_output.front().frame);
+           logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.front().frame), "udp_proto.cpp", "info");
           _last_acked_input = _pending_output.front();
           _pending_output.pop();
        }
@@ -839,11 +826,11 @@ void
 
              if(entry.msg) //check for a nullptr dereference
              {
-                 Log("creating rogue oop (seq: %d  delay: %d)\n", entry.msg->hdr.sequence_number, delay);
+                 logger->LogAndPrint(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp", "info");
              }
              else
              {
-
+                 //???????????????????????????????????????????????????????? WHY IS THIS HERE TONY ANSWER ME
              }
 
              _oo_packet.send_time = Platform::GetCurrentTimeMS() + delay;
@@ -863,9 +850,9 @@ void
        }
        if (_oo_packet.msg and _oo_packet.send_time < Platform::GetCurrentTimeMS()) 
        {
-          Log("sending rogue oop!");
-          _udp->SendTo((char *)_oo_packet.msg, _oo_packet.msg->PacketSize(), 0,
-                         (struct sockaddr *)&_oo_packet.dest_addr, sizeof _oo_packet.dest_addr);
+           logger->LogAndPrint("sending rogue oop!", "udp_proto.cpp", "info");
+
+          _udp->SendTo((char *)_oo_packet.msg, _oo_packet.msg->PacketSize(), 0, (struct sockaddr *)&_oo_packet.dest_addr, sizeof _oo_packet.dest_addr);
 
           delete _oo_packet.msg;
           _oo_packet.msg = NULL;

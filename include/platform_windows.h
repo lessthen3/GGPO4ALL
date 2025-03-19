@@ -18,6 +18,8 @@
 
 #include "macros.h"
 
+#include <timeapi.h> //apparently i need this idk where i took it out but i did tho lmfao
+
 class Platform 
 {
 public:  // types

@@ -81,11 +81,10 @@ protected:
 
    struct SavedFrame 
    {
-      unsigned char* buf;
-      int      cbuf;
+      string buf;
       int      frame;
       int      checksum;
-      SavedFrame() : buf(NULL), cbuf(0), frame(-1), checksum(0) { }
+      SavedFrame() : buf(), frame(-1), checksum(0) { }
    };
    struct SavedState 
    {

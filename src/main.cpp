@@ -17,30 +17,16 @@ DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
    return TRUE;
 }
 
-void
-ggpo_log(GGPOSession *ggpo, const char *fmt, ...)
-{
-   va_list args;
-   va_start(args, fmt);
-   ggpo_logv(ggpo, fmt, args);
-   va_end(args);
-}
-
-void
-ggpo_logv(GGPOSession *ggpo, const char *fmt, va_list args)
-{
-   if (ggpo) {
-      ggpo->Logv(fmt, args);
-   }
-}
-
 GGPOErrorCode
-ggpo_start_session(GGPOSession **session,
-                   GGPOSessionCallbacks *cb,
-                   const char *game,
-                   int num_players,
-                   int input_size,
-                   unsigned short localport)
+    ggpo_start_session
+    (
+        GGPOSession **session,
+        GGPOSessionCallbacks *cb,
+        const char *game,
+        int num_players,
+        int input_size,
+        unsigned short localport
+    )
 {
    *session= (GGPOSession *)new Peer2PeerBackend(cb,
                                                  game,

@@ -23,8 +23,9 @@ Sync::~Sync()
     * Delete frames manually here rather than in a destructor of the SavedFrame
     * structure so we can efficently copy frames via weak references.
     */
-   for (int i = 0; i < ARRAY_SIZE(_savedstate.frames); i++) {
-      _callbacks.free_buffer(_savedstate.frames[i].buf);
+   for (int i = 0; i < ARRAY_SIZE(_savedstate.frames); i++) 
+   {
+      _callbacks.free_buffer((void*)&_savedstate.frames[i].buf); //lmfao this is ridiculous
    }
    delete [] _input_queues;
    _input_queues = NULL;
@@ -175,14 +176,17 @@ void
     * the master).
     */
    ResetPrediction(_framecount);
-   for (int i = 0; i < count; i++) {
+
+   for (int i = 0; i < count; i++) 
+   {
       _callbacks.advance_frame(0);
    }
+
    ASSERT(_framecount == framecount);
 
    _rollingback = false;
 
-   logger->LogAndPrint("---\n", "sync.cpp", "info");
+   logger->LogAndPrint("---", "sync.cpp", "info"); //?????????????????????????
 }
 
 void
@@ -199,11 +203,11 @@ void
    _savedstate.head = FindSavedFrameIndex(frame);
    SavedFrame *state = _savedstate.frames + _savedstate.head;
 
-   logger->LogAndPrint(format("=== Loading frame info {} (size: {}  checksum: {}).", state->frame, state->cbuf, state->checksum), "sync.cpp", "info");
+   logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
 
    ASSERT(state->buf && state->cbuf);
 
-   _callbacks.load_game_state(state->buf, state->cbuf);
+   _callbacks.load_game_state(state->buf);
 
    // Reset framecount and the head of the state ring-buffer to point in
    // advance of the current frame (as if we had just finished executing it).
@@ -218,18 +222,12 @@ void
     * See StateCompress for the real save feature implemented by FinalBurn.
     * Write everything into the head, then advance the head pointer.
     */
-   SavedFrame *state = _savedstate.frames + _savedstate.head;
-
-   if (state->buf) 
-   {
-      _callbacks.free_buffer(state->buf);
-      state->buf = NULL;
-   }
+   SavedFrame* state = _savedstate.frames + _savedstate.head;
 
    state->frame = _framecount;
-   _callbacks.save_game_state(&state->buf, &state->cbuf, &state->checksum, state->frame);
+   _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
-   logger->LogAndPrint(format("=== Saved frame info {} (size: {}  checksum: {}).", state->frame, state->cbuf, state->checksum), "sync.cpp", "info");
+   logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
    _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
 }
 

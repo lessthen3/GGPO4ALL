@@ -79,32 +79,20 @@ void
        strncat_s(buf, remaining, ")", 1);
     }
 
-void
-    GameInput::log(char* prefix, bool show_frame) 
-    const
-    {
-        char buf[1024];
-        size_t c = strlen(prefix);
-        strcpy_s(buf, prefix);
-        desc(buf + c, ARRAY_SIZE(buf) - c, show_frame);
-        strncat_s(buf, ARRAY_SIZE(buf) - strlen(buf), "\n", 1);
-        Log(buf);
-    }
-
 bool
     GameInput::equal(GameInput& other, bool bitsonly)
     {
-       if (!bitsonly and frame != other.frame)
+       if (not bitsonly and frame != other.frame)
        {
-          Log("frames don't match: %d, %d\n", frame, other.frame);
+           logger->LogAndPrint(format("frames don't match: {}, {}", frame, other.frame), "game_input.cpp", "info");
        }
        if (size != other.size) 
        {
-          Log("sizes don't match: %d, %d\n", size, other.size);
+           logger->LogAndPrint(format("sizes don't match: {}, {}", size, other.size), "game_input.cpp", "info");
        }
        if (memcmp(bits, other.bits, size)) 
        {
-          Log("bits don't match\n");
+           logger->LogAndPrint("bits don't match", "game_input.cpp", "info");
        }
 
        ASSERT(size and other.size);

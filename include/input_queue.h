@@ -21,7 +21,7 @@ public:
 public:
    void Init(int id, int input_size);
    int GetLastConfirmedFrame();
-   int GetFirstIncorrectFrame();
+   int GetFirstIncorrectFrame() const;
    int GetLength() { return _length; }
 
    void SetFrameDelay(int delay) { _frame_delay = delay; }
@@ -34,7 +34,6 @@ public:
 protected:
    int AdvanceQueueHead(int frame);
    void AddDelayedInputToQueue(GameInput &input, int i);
-   void Log(const char *fmt, ...);
 
 protected:
    int                  _id;

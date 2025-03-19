@@ -28,20 +28,25 @@ TimeSync::advance_frame(GameInput &input, int advantage, int radvantage)
 }
 
 int
-TimeSync::recommend_frame_wait_duration(bool require_idle_input)
+    TimeSync::recommend_frame_wait_duration(bool require_idle_input)
 {
    // Average our local and remote frame advantages
    int i, sum = 0;
    float advantage, radvantage;
-   for (i = 0; i < ARRAY_SIZE(_local); i++) {
+
+   for (i = 0; i < ARRAY_SIZE(_local); i++) 
+   {
       sum += _local[i];
    }
-   advantage = sum / (float)ARRAY_SIZE(_local);
 
+   advantage = sum / (float)ARRAY_SIZE(_local);
    sum = 0;
-   for (i = 0; i < ARRAY_SIZE(_remote); i++) {
+
+   for (i = 0; i < ARRAY_SIZE(_remote); i++) 
+   {
       sum += _remote[i];
    }
+
    radvantage = sum / (float)ARRAY_SIZE(_remote);
 
    static int count = 0;
@@ -50,7 +55,8 @@ TimeSync::recommend_frame_wait_duration(bool require_idle_input)
    // See if someone should take action.  The person furthest ahead
    // needs to slow down so the other user can catch up.
    // Only do this if both clients agree on who's ahead!!
-   if (advantage >= radvantage) {
+   if (advantage >= radvantage) 
+   {
       return 0;
    }
 
@@ -59,11 +65,12 @@ TimeSync::recommend_frame_wait_duration(bool require_idle_input)
    // sleep for.
    int sleep_frames = (int)(((radvantage - advantage) / 2) + 0.5);
 
-   Log("iteration %d:  sleep frames is %d\n", count, sleep_frames);
+   logger->LogAndPrint(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp", "info");
 
    // Some things just aren't worth correcting for.  Make sure
    // the difference is relevant before proceeding.
-   if (sleep_frames < MIN_FRAME_ADVANTAGE) {
+   if (sleep_frames < MIN_FRAME_ADVANTAGE) 
+   {
       return 0;
    }
 
@@ -71,11 +78,14 @@ TimeSync::recommend_frame_wait_duration(bool require_idle_input)
    // a sleep.  This tries to make the emulator sleep while the
    // user's input isn't sweeping in arcs (e.g. fireball motions in
    // Street Fighter), which could cause the player to miss moves.
-   if (require_idle_input) {
-      for (i = 1; i < ARRAY_SIZE(_last_inputs); i++) {
-         if (!_last_inputs[i].equal(_last_inputs[0], true)) {
-            Log("iteration %d:  rejecting due to input stuff at position %d...!!!\n", count, i);
-            return 0;
+   if (require_idle_input) 
+   {
+      for (i = 1; i < ARRAY_SIZE(_last_inputs); i++) 
+      {
+         if (not _last_inputs[i].equal(_last_inputs[0], true)) 
+         {
+             logger->LogAndPrint(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp", "info");
+             return 0;
          }
       }
    }

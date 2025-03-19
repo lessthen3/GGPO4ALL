@@ -11,11 +11,11 @@
 
 #define GGPO_API
 
-#define GGPO_MAX_PLAYERS                  4
-#define GGPO_MAX_PREDICTION_FRAMES        8
-#define GGPO_MAX_SPECTATORS              32
+constexpr auto GGPO_MAX_PLAYERS = 4;
+constexpr auto GGPO_MAX_PREDICTION_FRAMES = 8;
+constexpr auto GGPO_MAX_SPECTATORS = 32;
 
-#define GGPO_SPECTATOR_INPUT_INTERVAL     4
+constexpr auto GGPO_SPECTATOR_INPUT_INTERVAL = 4;
 
 typedef struct GGPOSession GGPOSession;
 
@@ -87,7 +87,9 @@ typedef struct GGPOLocalEndpoint
    GGPO_ERRORLIST_ENTRY(GGPO_ERRORCODE_INPUT_DROPPED,          8)    \
    GGPO_ERRORLIST_ENTRY(GGPO_ERRORCODE_PLAYER_DISCONNECTED,    9)    \
    GGPO_ERRORLIST_ENTRY(GGPO_ERRORCODE_TOO_MANY_SPECTATORS,   10)    \
-   GGPO_ERRORLIST_ENTRY(GGPO_ERRORCODE_INVALID_REQUEST,       11)
+   GGPO_ERRORLIST_ENTRY(GGPO_ERRORCODE_INVALID_REQUEST,       11) \
+   GGPO_ERRORLIST_ENTRY(GGPO_ERRORCODE_FATAL_DESYNC,       12)
+
 
 #define GGPO_ERRORLIST_ENTRY(name, value)       name = value,
 typedef enum {
@@ -152,37 +154,37 @@ struct GGPOEvent
 
    union 
    {
-      struct connected
+      struct
       {
          GGPOPlayerHandle  player;
-      };
-      struct synchronizing 
+      }connected;
+      struct 
       {
          GGPOPlayerHandle  player;
          int               count;
          int               total;
-      };
-      struct synchronized 
+      }synchronizing;
+      struct 
       {
          GGPOPlayerHandle  player;
-      };
-      struct disconnected 
+      }synchronized;
+      struct 
       {
          GGPOPlayerHandle  player;
-      };
-      struct timesync 
+      }disconnected;
+      struct 
       {
          int               frames_ahead;
-      };
-      struct connection_interrupted 
+      }timesync;
+      struct 
       {
          GGPOPlayerHandle  player;
          int               disconnect_timeout;
-      };
-      struct connection_resumed 
+      }connection_interrupted;
+      struct 
       {
          GGPOPlayerHandle  player;
-      };
+      }connection_resumed;
    } u;
 };
 
@@ -205,7 +207,7 @@ struct GGPOSessionCallbacks
      * length into the *len parameter.  Optionally, the client can compute
      * a checksum of the data and store it in the *checksum argument.
      */
-    bool (*save_game_state)(unsigned char** buffer, int* len, int* checksum, int frame);
+    bool (*save_game_state)(string bugger, int* len, int* checksum, int frame);
 
     /*
      * load_game_state - GGPO.net will call this function at the beginning
@@ -214,7 +216,7 @@ struct GGPOSessionCallbacks
      * should make the current game state match the state contained in the
      * buffer.
      */
-    bool (*load_game_state)(unsigned char* buffer, int len);
+    bool (*load_game_state)(string buffer);
 
     /*
      * free_buffer - Frees a game state allocated in save_game_state.  You
