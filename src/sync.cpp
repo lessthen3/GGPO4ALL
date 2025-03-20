@@ -32,10 +32,9 @@ Sync::~Sync()
 }
 
 void
-Sync::Init(Sync::Config &config)
+    Sync::Init(Sync::Config& config)
 {
    _config = config;
-   _callbacks = config.callbacks;
    _framecount = 0;
    _rollingback = false;
 
@@ -45,7 +44,7 @@ Sync::Init(Sync::Config &config)
 }
 
 void
-Sync::SetLastConfirmedFrame(int frame) 
+    Sync::SetLastConfirmedFrame(int frame) 
 {   
    _last_confirmed_frame = frame;
    if (_last_confirmed_frame > 0) {
@@ -56,7 +55,7 @@ Sync::SetLastConfirmedFrame(int frame)
 }
 
 bool
-Sync::AddLocalInput(int queue, GameInput &input)
+    Sync::AddLocalInput(int queue, GameInput &input)
 {
    int frames_behind = _framecount - _last_confirmed_frame; 
 

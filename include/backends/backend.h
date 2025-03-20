@@ -10,7 +10,8 @@
 #include "ggponet.h"
 #include "platform_common.h"
 
-struct GGPOSession {
+struct GGPOSession 
+{
    virtual ~GGPOSession() { }
    virtual GGPOErrorCode DoPoll(int timeout) { return GGPO_OK; }
    virtual GGPOErrorCode AddPlayer(GGPOPlayer *player, GGPOPlayerHandle *handle) = 0;

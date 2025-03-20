@@ -21,7 +21,6 @@ GGPOErrorCode
     ggpo_start_session
     (
         GGPOSession **session,
-        GGPOSessionCallbacks *cb,
         const char *game,
         int num_players,
         int input_size,
@@ -37,38 +36,50 @@ GGPOErrorCode
 }
 
 GGPOErrorCode
-ggpo_add_player(GGPOSession *ggpo,
-                GGPOPlayer *player,
-                GGPOPlayerHandle *handle)
+    ggpo_add_player
+    (
+        GGPOSession *ggpo,
+        GGPOPlayer *player,
+        GGPOPlayerHandle *handle
+    )
 {
-   if (!ggpo) {
+   if (not ggpo) 
+   {
       return GGPO_ERRORCODE_INVALID_SESSION;
    }
+
    return ggpo->AddPlayer(player, handle);
 }
 
 
 
 GGPOErrorCode
-ggpo_start_synctest(GGPOSession **ggpo,
-                    GGPOSessionCallbacks *cb,
-                    char *game,
-                    int num_players,
-                    int input_size,
-                    int frames)
+    ggpo_start_synctest
+    (
+        GGPOSession **ggpo,
+        char *game,
+        int num_players,
+        int input_size,
+        int frames
+    )
 {
    *ggpo = (GGPOSession *)new SyncTestBackend(cb, game, frames, num_players);
    return GGPO_OK;
 }
 
 GGPOErrorCode
-ggpo_set_frame_delay(GGPOSession *ggpo,
-                     GGPOPlayerHandle player,
-                     int frame_delay)
+    ggpo_set_frame_delay
+    (
+        GGPOSession* ggpo,
+        GGPOPlayerHandle player,
+        int frame_delay
+    )
 {
-   if (!ggpo) {
+   if (not ggpo) 
+   {
       return GGPO_ERRORCODE_INVALID_SESSION;
    }
+
    return ggpo->SetFrameDelay(player, frame_delay);
 }
 

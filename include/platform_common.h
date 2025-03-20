@@ -16,7 +16,7 @@
   */
 
 #ifndef ARRAY_SIZE
-#  define ARRAY_SIZE(a)    (sizeof(a) / sizeof((a)[0]))
+#  define ARRAY_SIZE(__arg)    (sizeof(__arg) / sizeof((__arg)[0]))
 #endif
 
 #ifndef MAX_INT

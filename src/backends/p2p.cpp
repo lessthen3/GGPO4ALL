@@ -7,9 +7,9 @@
 
 #include "../include/backends/p2p.h"
 
-static const int RECOMMENDATION_INTERVAL           = 240;
-static const int DEFAULT_DISCONNECT_TIMEOUT        = 5000;
-static const int DEFAULT_DISCONNECT_NOTIFY_START   = 750;
+static constexpr int RECOMMENDATION_INTERVAL           = 240;
+static constexpr int DEFAULT_DISCONNECT_TIMEOUT        = 5000;
+static constexpr int DEFAULT_DISCONNECT_NOTIFY_START   = 750;
 
 Peer2PeerBackend::Peer2PeerBackend
     (
@@ -57,7 +57,7 @@ Peer2PeerBackend::Peer2PeerBackend
    /*
     * Preload the ROM
     */
-   _callbacks.begin_game(gamename);
+   //_callbacks.begin_game(gamename); //THIS IS DEPRECATED APPARENTLY SO IDK WHAT ITS DOIN HERE
 }
   
 Peer2PeerBackend::~Peer2PeerBackend()

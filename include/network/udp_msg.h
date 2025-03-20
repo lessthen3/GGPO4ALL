@@ -7,8 +7,8 @@
 
 #pragma once
 
-constexpr auto MAX_COMPRESSED_BITS = 4096;
-constexpr auto UDP_MSG_MAX_PLAYERS = 4;
+constexpr int MAX_COMPRESSED_BITS = 4096;
+constexpr int UDP_MSG_MAX_PLAYERS = 4;
 
 #pragma pack(push, 1)
 
@@ -85,7 +85,8 @@ struct UdpMsg
    } u;
 
 public:
-   int PacketSize() {
+   int PacketSize() 
+   {
       return sizeof(hdr) + PayloadSize();
    }
 
@@ -106,7 +107,9 @@ public:
              size += (u.input.num_bits + 7) / 8;
              return size;
       }
-      ASSERT(false);
+
+      ASSERT(false); // ??????????
+
       return 0;
    }
 

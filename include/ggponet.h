@@ -189,60 +189,6 @@ struct GGPOEvent
 };
 
 /*
- * The GGPOSessionCallbacks structure contains the callback functions that
- * your application must implement.  GGPO.net will periodically call these
- * functions during the game.  All callback functions must be implemented.
- */
-struct GGPOSessionCallbacks 
-{
-    /*
-     * begin_game callback - This callback has been deprecated.  You must
-     * implement it, but should ignore the 'game' parameter.
-     */
-    bool (*begin_game)(const char* game);
-
-    /*
-     * save_game_state - The client should allocate a buffer, copy the
-     * entire contents of the current game state into it, and copy the
-     * length into the *len parameter.  Optionally, the client can compute
-     * a checksum of the data and store it in the *checksum argument.
-     */
-    bool (*save_game_state)(string bugger, int* len, int* checksum, int frame);
-
-    /*
-     * load_game_state - GGPO.net will call this function at the beginning
-     * of a rollback.  The buffer and len parameters contain a previously
-     * saved state returned from the save_game_state function.  The client
-     * should make the current game state match the state contained in the
-     * buffer.
-     */
-    bool (*load_game_state)(string buffer);
-
-    /*
-     * free_buffer - Frees a game state allocated in save_game_state.  You
-     * should deallocate the memory contained in the buffer.
-     */
-    void (*free_buffer)(void* buffer);
-
-    /*
-     * advance_frame - Called during a rollback.  You should advance your game
-     * state by exactly one frame.  Before each frame, call ggpo_synchronize_input
-     * to retrieve the inputs you should use for that frame.  After each frame,
-     * you should call ggpo_advance_frame to notify GGPO.net that you're
-     * finished.
-     *
-     * The flags parameter is reserved.  It can safely be ignored at this time.
-     */
-    bool (*advance_frame)(int flags);
-
-    /*
-     * on_event - Notification that something has happened.  See the GGPOEventCode
-     * structure above for more information.
-     */
-    bool (*on_event)(GGPOEvent* info);
-};
-
-/*
  * The GGPONetworkStats function contains some statistics about the current
  * session.
  *
@@ -278,16 +224,18 @@ struct GGPOSessionCallbacks
  */
 struct GGPONetworkStats 
 {
-   struct {
+   struct network 
+   {
       int   send_queue_len;
       int   recv_queue_len;
       int   ping;
       int   kbps_sent;
-   } network;
-   struct {
+   };
+   struct timesync 
+   {
       int   local_frames_behind;
       int   remote_frames_behind;
-   } timesync;
+   };
 };
 
 /*
@@ -317,7 +265,6 @@ GGPO_API GGPOErrorCode
     ggpo_start_session
     (
         GGPOSession **session,
-        GGPOSessionCallbacks *cb,
         const char *game,
         int num_players,
         int input_size,
@@ -373,7 +320,6 @@ GGPO_API GGPOErrorCode
     ggpo_start_synctest
     (
         GGPOSession** session,
-        GGPOSessionCallbacks* cb,
         char* game,
         int num_players,
         int input_size,
@@ -409,7 +355,6 @@ GGPO_API GGPOErrorCode
     ggpo_start_spectating
     (
         GGPOSession** session,
-        GGPOSessionCallbacks* cb,
         const char* game,
         int num_players,
         int input_size,
@@ -450,8 +395,12 @@ GGPO_API GGPOErrorCode
  * timeout - The amount of time GGPO.net is allowed to spend in this function,
  * in milliseconds.
  */
-GGPO_API GGPOErrorCode  ggpo_idle(GGPOSession *,
-                                         int timeout);
+GGPO_API GGPOErrorCode  
+    ggpo_idle
+    (
+        GGPOSession *,
+        int timeout
+    );
 
 /*
  * ggpo_add_local_input --
@@ -494,10 +443,14 @@ GGPO_API GGPOErrorCode
  * that player will be zeroed and the i-th flag will be set.  For example,
  * if only player 3 has disconnected, disconnect flags will be 8 (i.e. 1 << 3).
  */
-GGPO_API GGPOErrorCode  ggpo_synchronize_input(GGPOSession *,
-                                                      void *values,
-                                                      int size,
-                                                      int *disconnect_flags);
+GGPO_API GGPOErrorCode  
+    ggpo_synchronize_input
+    (
+        GGPOSession *,
+        void *values,
+        int size,
+        int *disconnect_flags
+    );
 
 /*
  * ggpo_disconnect_player --
@@ -505,8 +458,12 @@ GGPO_API GGPOErrorCode  ggpo_synchronize_input(GGPOSession *,
  * Disconnects a remote player from a game.  Will return GGPO_ERRORCODE_PLAYER_DISCONNECTED
  * if you try to disconnect a player who has already been disconnected.
  */
-GGPO_API GGPOErrorCode  ggpo_disconnect_player(GGPOSession *,
-                                                      GGPOPlayerHandle player);
+GGPO_API GGPOErrorCode  
+    ggpo_disconnect_player
+    (
+        GGPOSession *,
+        GGPOPlayerHandle player
+    );
 
 /*
  * ggpo_advance_frame --
@@ -528,9 +485,13 @@ GGPO_API GGPOErrorCode  ggpo_advance_frame(GGPOSession *);
  *
  * stats - Out parameter to the network statistics.
  */
-GGPO_API GGPOErrorCode  ggpo_get_network_stats(GGPOSession *,
-                                                      GGPOPlayerHandle player,
-                                                      GGPONetworkStats *stats);
+GGPO_API GGPOErrorCode  
+    ggpo_get_network_stats
+    (
+        GGPOSession *,
+        GGPOPlayerHandle player,
+        GGPONetworkStats *stats
+    );
 
 /*
  * ggpo_set_disconnect_timeout --
@@ -544,8 +505,12 @@ GGPO_API GGPOErrorCode  ggpo_get_network_stats(GGPOSession *,
  *
  * timeout - The time in milliseconds to wait before disconnecting a peer.
  */
-GGPO_API GGPOErrorCode  ggpo_set_disconnect_timeout(GGPOSession *,
-                                                           int timeout);
+GGPO_API GGPOErrorCode 
+    ggpo_set_disconnect_timeout
+    (
+        GGPOSession *,
+        int timeout
+    );
 
 /*
  * ggpo_set_disconnect_notify_start --
@@ -556,26 +521,11 @@ GGPO_API GGPOErrorCode  ggpo_set_disconnect_timeout(GGPOSession *,
  * timeout - The amount of time which needs to elapse without receiving a packet
  *           before the GGPO_EVENTCODE_NETWORK_INTERRUPTED event is sent.
  */
-GGPO_API GGPOErrorCode  ggpo_set_disconnect_notify_start(GGPOSession *,
-                                                                int timeout);
+GGPO_API GGPOErrorCode  
+    ggpo_set_disconnect_notify_start
+    (
+        GGPOSession *,
+        int timeout
+    );
 
-/*
- * ggpo_log --
- *
- * Used to write to the ggpo.net log.  In the current versions of the
- * SDK, a log file is only generated if the "quark.log" environment
- * variable is set to 1.  This will change in future versions of the
- * SDK.
- */
-GGPO_API void  ggpo_log(GGPOSession *,
-                               const char *fmt, ...);
-/*
- * ggpo_logv --
- *
- * A varargs compatible version of ggpo_log.  See ggpo_log for
- * more details.
- */
-GGPO_API void  ggpo_logv(GGPOSession *,
-                                const char *fmt,
-                                va_list args);
 

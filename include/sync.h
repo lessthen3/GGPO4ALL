@@ -23,7 +23,6 @@ class Sync
 public:
    struct Config 
    {
-      GGPOSessionCallbacks    callbacks;
       int                     num_prediction_frames;
       int                     num_players;
       int                     input_size;
@@ -44,17 +43,17 @@ public:
    };
 
 public:
-   Sync(UdpMsg::connect_status *connect_status);
+   Sync(UdpMsg::connect_status* connect_status);
    virtual ~Sync();
 
    void Init(Config &config);
 
    void SetLastConfirmedFrame(int frame);
    void SetFrameDelay(int queue, int delay);
-   bool AddLocalInput(int queue, GameInput &input);
-   void AddRemoteInput(int queue, GameInput &input);
-   int GetConfirmedInputs(void *values, int size, int frame);
-   int SynchronizeInputs(void *values, int size);
+   bool AddLocalInput(int queue, GameInput& input);
+   void AddRemoteInput(int queue, GameInput& input);
+   int GetConfirmedInputs(void* values, int size, int frame);
+   int SynchronizeInputs(void* values, int size);
 
    void CheckSimulation(int timeout);
    void AdjustSimulation(int seek_to);
@@ -74,7 +73,7 @@ public:
        return _rollingback; 
    }
 
-   bool GetEvent(Event &e);
+   bool GetEvent(Event& e);
 
 protected:
    friend SyncTestBackend;
@@ -97,12 +96,11 @@ protected:
    int FindSavedFrameIndex(int frame);
    SavedFrame &GetLastSavedFrame();
 
-   bool CreateQueues(Config &config);
-   bool CheckSimulationConsistency(int *seekTo);
+   bool CreateQueues(Config& config);
+   bool CheckSimulationConsistency(int* seekTo);
    void ResetPrediction(int frameNumber);
 
 protected:
-   GGPOSessionCallbacks _callbacks;
    SavedState     _savedstate;
    Config         _config;
 
@@ -114,6 +112,6 @@ protected:
    InputQueue* _input_queues;
 
    RingBuffer<Event, 32> _event_queue;
-   UdpMsg::connect_status *_local_connect_status;
+   UdpMsg::connect_status* _local_connect_status;
 };
 

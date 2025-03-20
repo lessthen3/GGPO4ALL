@@ -43,6 +43,10 @@ elseif(APPLE)
 		APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Wpedantic
 	)
 
+	if(CMAKE_BUILD_TYPE STREQUAL "Debug") #treat warnings as errors for debug builds
+		set_property(TARGET ${target} APPEND PROPERTY COMPILE_OPTIONS -Werror)
+	endif()
+
 elseif(UNIX)
 
 	set(PLATFORM_NAME "linux")
@@ -51,6 +55,10 @@ elseif(UNIX)
 		TARGET ${target} 
 		APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Wpedantic
 	)
+
+	if(CMAKE_BUILD_TYPE STREQUAL "Debug") #treat warnings as errors for debug builds
+		set_property(TARGET ${target} APPEND PROPERTY COMPILE_OPTIONS -Werror)
+	endif()
 
 else()
     message(FATAL_ERROR "Unsupported platform!")

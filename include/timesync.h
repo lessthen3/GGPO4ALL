@@ -10,12 +10,13 @@
 #include "platform_common.h"
 #include "game_input.h"
 
-#define FRAME_WINDOW_SIZE           40
-#define MIN_UNIQUE_FRAMES           10
-#define MIN_FRAME_ADVANTAGE          3
-#define MAX_FRAME_ADVANTAGE          9
+constexpr int FRAME_WINDOW_SIZE = 40;
+constexpr int MIN_UNIQUE_FRAMES = 10;
+constexpr int MIN_FRAME_ADVANTAGE = 3;
+constexpr int MAX_FRAME_ADVANTAGE = 9;
 
-class TimeSync {
+class TimeSync 
+{
 public:
    TimeSync();
    virtual ~TimeSync ();

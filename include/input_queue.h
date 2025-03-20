@@ -9,8 +9,8 @@
 
 #include "game_input.h"
 
-#define INPUT_QUEUE_LENGTH    128
-#define DEFAULT_INPUT_SIZE      4
+constexpr int INPUT_QUEUE_LENGTH = 128;
+constexpr int DEFAULT_INPUT_SIZE = 4;
 
 class InputQueue 
 {
@@ -22,7 +22,13 @@ public:
    void Init(int id, int input_size);
    int GetLastConfirmedFrame();
    int GetFirstIncorrectFrame() const;
-   int GetLength() { return _length; }
+
+   int 
+	   GetLength()
+	   const
+   { 
+	   return _length; 
+   }
 
    void SetFrameDelay(int delay) { _frame_delay = delay; }
    void ResetPrediction(int frame);
