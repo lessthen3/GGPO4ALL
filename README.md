@@ -15,13 +15,13 @@ Having a blackbox design like this just obscures control flow and makes integrat
 
 The purpose of a library is to offer functionality to an end-user to empower them to accomplish whatever end goal the software they are building does.
 
-With this new design I hope it is easier to integrate GGPO4ALL into whatever project you are working on, while also giving more freedom over how the control flow of your network code works without adding any tech debt.
+With this new design I hope it is easier to integrate GGPO4ALL into whatever project you are working on, while also giving more freedom over how the control flow of your network code works without adding much tech debt.
 
-__GGPO4ALL does not handle any compression on your behalf anymore, any compression that you may need has to be handled before and after sending packets__
+__GGPO4ALL does not handle any compression on your behalf anymore, any compression that you may need has to be handled before sending and after receiving packets__
 
 I chose to remove zlib as a dependency because I think that letting the end-user decide which compression solution best suits their specific use case is overall a better design.
 
-This in my opinion is cleaner, more efficient, and leaves GGPO4ALL without any external depencies besides the cpp STL.
+This in my opinion is cleaner, more efficient, and leaves GGPO4ALL without any external depencies besides the cpp STL and OS specific API's.
 
 __IMPORTANT:__ GGP4OALL is only meant to be called on by a single thread. This is subject to change, but for now GGPO4ALL is meant to be used on a network thread or on the main thread of a game engine.
 
