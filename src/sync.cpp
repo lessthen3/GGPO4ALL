@@ -6,334 +6,338 @@
  */
 
 #include "sync.h"
-
-Sync::Sync(UdpMsg::connect_status *connect_status) :
- _local_connect_status(connect_status),
- _input_queues(NULL)
+ 
+namespace GGPO 
 {
-   _framecount = 0;
-   _last_confirmed_frame = -1;
-   _max_prediction_frames = 0;
-   memset(&_savedstate, 0, sizeof(_savedstate));
-}
 
-Sync::~Sync()
-{
-   /*
-    * Delete frames manually here rather than in a destructor of the SavedFrame
-    * structure so we can efficently copy frames via weak references.
-    */
-   for (int i = 0; i < ARRAY_SIZE(_savedstate.frames); i++) 
-   {
-      _callbacks.free_buffer((void*)&_savedstate.frames[i].buf); //lmfao this is ridiculous
-   }
-   delete [] _input_queues;
-   _input_queues = NULL;
-}
+     Sync::Sync(UdpMsg::connect_status* connect_status) :
+         _local_connect_status(connect_status),
+         _input_queues(NULL)
+     {
+         _framecount = 0;
+         _last_confirmed_frame = -1;
+         _max_prediction_frames = 0;
+         memset(&_savedstate, 0, sizeof(_savedstate));
+     }
 
-void
-    Sync::Init(Sync::Config& config)
-{
-   _config = config;
-   _framecount = 0;
-   _rollingback = false;
+     Sync::~Sync()
+     {
+         /*
+          * Delete frames manually here rather than in a destructor of the SavedFrame
+          * structure so we can efficently copy frames via weak references.
+          */
+         for (int i = 0; i < ARRAY_SIZE(_savedstate.frames); i++)
+         {
+             _callbacks.free_buffer((void*)&_savedstate.frames[i].buf); //lmfao this is ridiculous
+         }
+         delete[] _input_queues;
+         _input_queues = NULL;
+     }
 
-   _max_prediction_frames = config.num_prediction_frames;
+     void
+         Sync::Init(Sync::Config& config)
+     {
+         _config = config;
+         _framecount = 0;
+         _rollingback = false;
 
-   CreateQueues(config);
-}
+         _max_prediction_frames = config.num_prediction_frames;
 
-void
-    Sync::SetLastConfirmedFrame(int frame) 
-{   
-   _last_confirmed_frame = frame;
-   if (_last_confirmed_frame > 0) {
-      for (int i = 0; i < _config.num_players; i++) {
-         _input_queues[i].DiscardConfirmedFrames(frame - 1);
-      }
-   }
-}
+         CreateQueues(config);
+     }
 
-bool
-    Sync::AddLocalInput(int queue, GameInput &input)
-{
-   int frames_behind = _framecount - _last_confirmed_frame; 
+     void
+         Sync::SetLastConfirmedFrame(int frame)
+     {
+         _last_confirmed_frame = frame;
+         if (_last_confirmed_frame > 0) {
+             for (int i = 0; i < _config.num_players; i++) {
+                 _input_queues[i].DiscardConfirmedFrames(frame - 1);
+             }
+         }
+     }
 
-   if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) 
-   {
-       logger->LogAndPrint("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", "info");
-      return false;
-   }
+     bool
+         Sync::AddLocalInput(int queue, GameInput& input)
+     {
+         int frames_behind = _framecount - _last_confirmed_frame;
 
-   if (_framecount == 0) 
-   {
-      SaveCurrentFrame();
-   }
+         if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames)
+         {
+             logger->LogAndPrint("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", "info");
+             return false;
+         }
 
-   logger->LogAndPrint(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", "info");
+         if (_framecount == 0)
+         {
+             SaveCurrentFrame();
+         }
 
-   input.frame = _framecount;
-   _input_queues[queue].AddInput(input);
+         logger->LogAndPrint(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", "info");
 
-   return true;
-}
+         input.frame = _framecount;
+         _input_queues[queue].AddInput(input);
 
-void
-    Sync::AddRemoteInput(int queue, GameInput &input)
-{
-   _input_queues[queue].AddInput(input);
-}
+         return true;
+     }
 
-int
-    Sync::GetConfirmedInputs(void* values, int size, int frame)
-{
-   int disconnect_flags = 0;
-   char *output = (char *)values;
+     void
+         Sync::AddRemoteInput(int queue, GameInput& input)
+     {
+         _input_queues[queue].AddInput(input);
+     }
 
-   ASSERT(size >= _config.num_players * _config.input_size);
+     int
+         Sync::GetConfirmedInputs(void* values, int size, int frame)
+     {
+         int disconnect_flags = 0;
+         char* output = (char*)values;
 
-   memset(output, 0, size);
+         ASSERT(size >= _config.num_players * _config.input_size);
 
-   for (int i = 0; i < _config.num_players; i++) 
-   {
-      GameInput input;
-      if (_local_connect_status[i].disconnected && frame > _local_connect_status[i].last_frame) 
-      {
-         disconnect_flags |= (1 << i);
-         input.erase();
-      } 
-      else 
-      {
-         _input_queues[i].GetConfirmedInput(frame, &input);
-      }
-      memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
-   }
-   return disconnect_flags;
-}
+         memset(output, 0, size);
 
-int
-    Sync::SynchronizeInputs(void* values, int size)
-{
-   int disconnect_flags = 0;
-   char *output = (char *)values;
+         for (int i = 0; i < _config.num_players; i++)
+         {
+             GameInput input;
+             if (_local_connect_status[i].disconnected && frame > _local_connect_status[i].last_frame)
+             {
+                 disconnect_flags |= (1 << i);
+                 input.erase();
+             }
+             else
+             {
+                 _input_queues[i].GetConfirmedInput(frame, &input);
+             }
+             memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
+         }
+         return disconnect_flags;
+     }
 
-   ASSERT(size >= _config.num_players * _config.input_size);
+     int
+         Sync::SynchronizeInputs(void* values, int size)
+     {
+         int disconnect_flags = 0;
+         char* output = (char*)values;
 
-   memset(output, 0, size);
-   for (int i = 0; i < _config.num_players; i++) 
-   {
-      GameInput input;
+         ASSERT(size >= _config.num_players * _config.input_size);
 
-      if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame)
-      {
-         disconnect_flags |= (1 << i);
-         input.erase();
-      } 
-      else 
-      {
-         _input_queues[i].GetInput(_framecount, &input);
-      }
-      memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
-   }
-   return disconnect_flags;
-}
+         memset(output, 0, size);
+         for (int i = 0; i < _config.num_players; i++)
+         {
+             GameInput input;
 
-void
-    Sync::CheckSimulation(int timeout)
-{
-   int seek_to;
-   if (not CheckSimulationConsistency(&seek_to)) 
-   {
-      AdjustSimulation(seek_to);
-   }
-}
+             if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame)
+             {
+                 disconnect_flags |= (1 << i);
+                 input.erase();
+             }
+             else
+             {
+                 _input_queues[i].GetInput(_framecount, &input);
+             }
+             memcpy(output + (i * _config.input_size), input.bits, _config.input_size);
+         }
+         return disconnect_flags;
+     }
 
-void
-    Sync::IncrementFrame(void)
-{
-   _framecount++;
-   SaveCurrentFrame();
-}
+     void
+         Sync::CheckSimulation(int timeout)
+     {
+         int seek_to;
+         if (not CheckSimulationConsistency(&seek_to))
+         {
+             AdjustSimulation(seek_to);
+         }
+     }
 
-void
-    Sync::AdjustSimulation(int seek_to)
-{
-   int framecount = _framecount;
-   int count = _framecount - seek_to;
+     void
+         Sync::IncrementFrame(void)
+     {
+         _framecount++;
+         SaveCurrentFrame();
+     }
 
-   logger->LogAndPrint("Catching up", "sync.cpp", "info");
-   _rollingback = true;
+     void
+         Sync::AdjustSimulation(int seek_to)
+     {
+         int framecount = _framecount;
+         int count = _framecount - seek_to;
 
-   /*
-    * Flush our input queue and load the last frame.
-    */
-   LoadFrame(seek_to);
-   ASSERT(_framecount == seek_to);
+         logger->LogAndPrint("Catching up", "sync.cpp", "info");
+         _rollingback = true;
 
-   /*
-    * Advance frame by frame (stuffing notifications back to 
-    * the master).
-    */
-   ResetPrediction(_framecount);
+         /*
+          * Flush our input queue and load the last frame.
+          */
+         LoadFrame(seek_to);
+         ASSERT(_framecount == seek_to);
 
-   for (int i = 0; i < count; i++) 
-   {
-      _callbacks.advance_frame(0);
-   }
+         /*
+          * Advance frame by frame (stuffing notifications back to
+          * the master).
+          */
+         ResetPrediction(_framecount);
 
-   ASSERT(_framecount == framecount);
+         for (int i = 0; i < count; i++)
+         {
+             _callbacks.advance_frame(0);
+         }
 
-   _rollingback = false;
+         ASSERT(_framecount == framecount);
 
-   logger->LogAndPrint("---", "sync.cpp", "info"); //?????????????????????????
-}
+         _rollingback = false;
 
-void
-    Sync::LoadFrame(int frame)
-{
-   // find the frame in question
-   if (frame == _framecount) 
-   {
-      logger->LogAndPrint("Skipping NOP.", "sync.cpp", "info");
-      return;
-   }
+         logger->LogAndPrint("---", "sync.cpp", "info"); //?????????????????????????
+     }
 
-   // Move the head pointer back and load it up
-   _savedstate.head = FindSavedFrameIndex(frame);
-   SavedFrame *state = _savedstate.frames + _savedstate.head;
+     void
+         Sync::LoadFrame(int frame)
+     {
+         // find the frame in question
+         if (frame == _framecount)
+         {
+             logger->LogAndPrint("Skipping NOP.", "sync.cpp", "info");
+             return;
+         }
 
-   logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
+         // Move the head pointer back and load it up
+         _savedstate.head = FindSavedFrameIndex(frame);
+         SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-   ASSERT(state->buf && state->cbuf);
+         logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
 
-   _callbacks.load_game_state(state->buf);
+         ASSERT(state->buf && state->cbuf);
 
-   // Reset framecount and the head of the state ring-buffer to point in
-   // advance of the current frame (as if we had just finished executing it).
-   _framecount = state->frame;
-   _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
-}
+         _callbacks.load_game_state(state->buf);
 
-void
-    Sync::SaveCurrentFrame()
-{
-   /*
-    * See StateCompress for the real save feature implemented by FinalBurn.
-    * Write everything into the head, then advance the head pointer.
-    */
-   SavedFrame* state = _savedstate.frames + _savedstate.head;
+         // Reset framecount and the head of the state ring-buffer to point in
+         // advance of the current frame (as if we had just finished executing it).
+         _framecount = state->frame;
+         _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
+     }
 
-   state->frame = _framecount;
-   _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
+     void
+         Sync::SaveCurrentFrame()
+     {
+         /*
+          * See StateCompress for the real save feature implemented by FinalBurn.
+          * Write everything into the head, then advance the head pointer.
+          */
+         SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-   logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
-   _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
-}
+         state->frame = _framecount;
+         _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
-Sync::SavedFrame&
-    Sync::GetLastSavedFrame()
-{
-   int i = _savedstate.head - 1;
+         logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
+         _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
+     }
 
-   if (i < 0) 
-   {
-      i = ARRAY_SIZE(_savedstate.frames) - 1;
-   }
+     Sync::SavedFrame&
+         Sync::GetLastSavedFrame()
+     {
+         int i = _savedstate.head - 1;
 
-   return _savedstate.frames[i];
-}
+         if (i < 0)
+         {
+             i = ARRAY_SIZE(_savedstate.frames) - 1;
+         }
 
-
-int
-    Sync::FindSavedFrameIndex(int frame)
-{
-   int i, count = ARRAY_SIZE(_savedstate.frames);
-
-   for (i = 0; i < count; i++) 
-   {
-      if (_savedstate.frames[i].frame == frame) 
-      {
-         break;
-      }
-   }
-   if (i == count) 
-   {
-      ASSERT(FALSE);
-   }
-
-   return i;
-}
+         return _savedstate.frames[i];
+     }
 
 
-bool
-    Sync::CreateQueues(Config& config)
-{
-   delete [] _input_queues;
-   _input_queues = new InputQueue[_config.num_players];
+     int
+         Sync::FindSavedFrameIndex(int frame)
+     {
+         int i, count = ARRAY_SIZE(_savedstate.frames);
 
-   for (int i = 0; i < _config.num_players; i++) 
-   {
-      _input_queues[i].Init(i, _config.input_size);
-   }
+         for (i = 0; i < count; i++)
+         {
+             if (_savedstate.frames[i].frame == frame)
+             {
+                 break;
+             }
+         }
+         if (i == count)
+         {
+             ASSERT(FALSE);
+         }
 
-   return true;
-}
-
-bool
-    Sync::CheckSimulationConsistency(int* seekTo)
-{
-   int first_incorrect = GameInput::NullFrame;
-
-   for (int i = 0; i < _config.num_players; i++) 
-   {
-      int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-      logger->LogAndPrint(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", "info");
-
-      if (incorrect != GameInput::NullFrame and (first_incorrect == GameInput::NullFrame or incorrect < first_incorrect)) 
-      {
-         first_incorrect = incorrect;
-      }
-   }
-
-   if (first_incorrect == GameInput::NullFrame) 
-   {
-       logger->LogAndPrint("prediction ok.  proceeding.", "sync.cpp", "info");
-      return true;
-   }
-
-   *seekTo = first_incorrect;
-
-   return false;
-}
-
-void
-    Sync::SetFrameDelay(int queue, int delay)
-{
-   _input_queues[queue].SetFrameDelay(delay);
-}
+         return i;
+     }
 
 
-void
-    Sync::ResetPrediction(int frameNumber)
-{
-   for (int i = 0; i < _config.num_players; i++) 
-   {
-      _input_queues[i].ResetPrediction(frameNumber);
-   }
-}
+     bool
+         Sync::CreateQueues(Config& config)
+     {
+         delete[] _input_queues;
+         _input_queues = new InputQueue[_config.num_players];
+
+         for (int i = 0; i < _config.num_players; i++)
+         {
+             _input_queues[i].Init(i, _config.input_size);
+         }
+
+         return true;
+     }
+
+     bool
+         Sync::CheckSimulationConsistency(int* seekTo)
+     {
+         int first_incorrect = GameInput::NullFrame;
+
+         for (int i = 0; i < _config.num_players; i++)
+         {
+             int incorrect = _input_queues[i].GetFirstIncorrectFrame();
+             logger->LogAndPrint(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", "info");
+
+             if (incorrect != GameInput::NullFrame and (first_incorrect == GameInput::NullFrame or incorrect < first_incorrect))
+             {
+                 first_incorrect = incorrect;
+             }
+         }
+
+         if (first_incorrect == GameInput::NullFrame)
+         {
+             logger->LogAndPrint("prediction ok.  proceeding.", "sync.cpp", "info");
+             return true;
+         }
+
+         *seekTo = first_incorrect;
+
+         return false;
+     }
+
+     void
+         Sync::SetFrameDelay(int queue, int delay)
+     {
+         _input_queues[queue].SetFrameDelay(delay);
+     }
 
 
-bool
-    Sync::GetEvent(Event& e)
-{
-   if (_event_queue.size()) 
-   {
-      e = _event_queue.front();
-      _event_queue.pop();
-      return true;
-   }
+     void
+         Sync::ResetPrediction(int frameNumber)
+     {
+         for (int i = 0; i < _config.num_players; i++)
+         {
+             _input_queues[i].ResetPrediction(frameNumber);
+         }
+     }
 
-   return false;
+
+     bool
+         Sync::GetEvent(Event& e)
+     {
+         if (_event_queue.size())
+         {
+             e = _event_queue.front();
+             _event_queue.pop();
+             return true;
+         }
+
+         return false;
+     }
 }
 
 

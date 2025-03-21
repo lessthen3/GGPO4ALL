@@ -10,23 +10,26 @@
 #include "platform_common.h"
 #include "game_input.h"
 
-constexpr int FRAME_WINDOW_SIZE = 40;
-constexpr int MIN_UNIQUE_FRAMES = 10;
-constexpr int MIN_FRAME_ADVANTAGE = 3;
-constexpr int MAX_FRAME_ADVANTAGE = 9;
-
-class TimeSync 
+namespace GGPO
 {
-public:
-   TimeSync();
-   virtual ~TimeSync ();
+	 constexpr int FRAME_WINDOW_SIZE = 40;
+	 constexpr int MIN_UNIQUE_FRAMES = 10;
+	 constexpr int MIN_FRAME_ADVANTAGE = 3;
+	 constexpr int MAX_FRAME_ADVANTAGE = 9;
 
-   void advance_frame(GameInput &input, int advantage, int radvantage);
-   int recommend_frame_wait_duration(bool require_idle_input);
+	 class TimeSync
+	 {
+	 public:
+		 TimeSync();
+		 virtual ~TimeSync();
 
-protected:
-   int         _local[FRAME_WINDOW_SIZE];
-   int         _remote[FRAME_WINDOW_SIZE];
-   GameInput   _last_inputs[MIN_UNIQUE_FRAMES];
-   int         _next_prediction;
-};
+		 void advance_frame(GameInput& input, int advantage, int radvantage);
+		 int recommend_frame_wait_duration(bool require_idle_input);
+
+	 protected:
+		 int         _local[FRAME_WINDOW_SIZE];
+		 int         _remote[FRAME_WINDOW_SIZE];
+		 GameInput   _last_inputs[MIN_UNIQUE_FRAMES];
+		 int         _next_prediction;
+	 };
+}

@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
+ * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
  *
  * Use of this software is governed by the MIT license that can be found
  * in the LICENSE file.
@@ -14,71 +14,74 @@
 #include "timesync.h"
 #include "network/udp_proto.h"
 
-#define SPECTATOR_FRAME_BUFFER_SIZE    64
+namespace GGPO
+{
+	constexpr int SPECTATOR_FRAME_BUFFER_SIZE = 64;
 
-class SpectatorBackend : public IQuarkBackend, IPollSink, Udp::Callbacks {
-public:
-   SpectatorBackend(GGPOSessionCallbacks* cb, const char* gamename, uint16_t localport, int num_players, int input_size, char* hostip, u_short hostport);
-   virtual ~SpectatorBackend();
+	 class SpectatorBackend : public IQuarkBackend, IPollSink, Udp::Callbacks 
+	 {
+	 public:
+		 SpectatorBackend(const char* gamename, uint16_t localport, int num_players, int input_size, char* hostip, uint16_t hostport);
+		 virtual ~SpectatorBackend();
 
 
-public:
-   virtual GGPOErrorCode DoPoll(int timeout);
-   virtual GGPOErrorCode SyncInput(void* values, int size, int* disconnect_flags);
-   virtual GGPOErrorCode IncrementFrame(void);
+	 public:
+		 virtual ErrorCode DoPoll(int timeout);
+		 virtual ErrorCode SyncInput(void* values, int size, int* disconnect_flags);
+		 virtual ErrorCode IncrementFrame(void);
 
-   virtual GGPOErrorCode AddPlayer(GGPOPlayer* player, GGPOPlayerHandle* handle) 
-   { 
-	   return GGPO_ERRORCODE_UNSUPPORTED; 
-   }
+		 virtual ErrorCode AddPlayer(Player* player, PlayerHandle* handle)
+		 {
+			 return ErrorCode::UNSUPPORTED;
+		 }
 
-   virtual GGPOErrorCode AddLocalInput(GGPOPlayerHandle player, void* values, int size) //??????
-   { 
-	   return GGPO_OK; 
-   }
+		 virtual ErrorCode AddLocalInput(PlayerHandle player, void* values, int size) //??????
+		 {
+			 return ErrorCode::OK;
+		 }
 
-   virtual GGPOErrorCode DisconnectPlayer(GGPOPlayerHandle handle) 
-   { 
-	   return GGPO_ERRORCODE_UNSUPPORTED; 
-   }
+		 virtual ErrorCode DisconnectPlayer(PlayerHandle handle)
+		 {
+			 return ErrorCode::UNSUPPORTED;
+		 }
 
-   virtual GGPOErrorCode GetNetworkStats(GGPONetworkStats* stats, GGPOPlayerHandle handle) 
-   { 
-	   return GGPO_ERRORCODE_UNSUPPORTED; 
-   }
+		 virtual ErrorCode GetNetworkStats(NetworkStats* stats, PlayerHandle handle)
+		 {
+			 return ErrorCode::UNSUPPORTED;
+		 }
 
-   virtual GGPOErrorCode SetFrameDelay(GGPOPlayerHandle player, int delay) 
-   { 
-	   return GGPO_ERRORCODE_UNSUPPORTED; 
-   }
+		 virtual ErrorCode SetFrameDelay(PlayerHandle player, int delay)
+		 {
+			 return ErrorCode::UNSUPPORTED;
+		 }
 
-   virtual GGPOErrorCode SetDisconnectTimeout(int timeout) 
-   { 
-	   return GGPO_ERRORCODE_UNSUPPORTED; 
-   }
+		 virtual ErrorCode SetDisconnectTimeout(int timeout)
+		 {
+			 return ErrorCode::UNSUPPORTED;
+		 }
 
-   virtual GGPOErrorCode SetDisconnectNotifyStart(int timeout) 
-   { 
-	   return GGPO_ERRORCODE_UNSUPPORTED; 
-   }
+		 virtual ErrorCode SetDisconnectNotifyStart(int timeout)
+		 {
+			 return ErrorCode::UNSUPPORTED;
+		 }
 
-public:
-   virtual void OnMsg(sockaddr_in& from, UdpMsg* msg, int len);
+	 public:
+		 virtual void OnMsg(sockaddr_in& from, UdpMsg* msg, int len);
 
-protected:
-   void PollUdpProtocolEvents(void);
-   void CheckInitialSync(void); //?????????
+	 protected:
+		 void PollUdpProtocolEvents(void);
+		 void CheckInitialSync(void); //?????????
 
-   void OnUdpProtocolEvent(UdpProtocol::Event& e);
+		 void OnUdpProtocolEvent(UdpProtocol::Event& e);
 
-protected:
-   GGPOSessionCallbacks  _callbacks;
-   Poll                  _poll;
-   Udp                   _udp;
-   UdpProtocol           _host;
-   bool                  _synchronizing;
-   int                   _input_size;
-   int                   _num_players;
-   int                   _next_input_to_send;
-   GameInput             _inputs[SPECTATOR_FRAME_BUFFER_SIZE];
-};
+	 protected:
+		 Poll                  _poll;
+		 Udp                   _udp;
+		 UdpProtocol           _host;
+		 bool                  _synchronizing;
+		 int                   _input_size;
+		 int                   _num_players;
+		 int                   _next_input_to_send;
+		 GameInput             _inputs[SPECTATOR_FRAME_BUFFER_SIZE];
+	 };
+}

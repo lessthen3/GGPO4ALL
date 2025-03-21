@@ -11,8 +11,11 @@
 
 #include "../include/platform_common.h"
 
-LogManager* logger = &LogManager::GGPO_LOGGER(); //grabbing a global reference to the singleton logger for easier reading 
-//i might just create a logger wherever this is used to allow for multi threaded environments
+namespace GGPO
+{
+
+    LogManager* logger = &LogManager::GGPO_LOGGER(); //grabbing a global reference to the singleton logger for easier reading 
+    //i might just create a logger wherever this is used to allow for multi threaded environments
 
 #if defined(_WIN32) or defined(_WIN64)
 
@@ -46,7 +49,7 @@ LogManager* logger = &LogManager::GGPO_LOGGER(); //grabbing a global reference t
 
     struct timespec start = { 0 };
 
-    uint32_t 
+    uint32_t
         Platform::GetCurrentTimeMS()
     {
         if (start.tv_sec == 0 && start.tv_nsec == 0)
@@ -64,3 +67,4 @@ LogManager* logger = &LogManager::GGPO_LOGGER(); //grabbing a global reference t
     }
 
 #endif //Unix OS Check //Windows OS Check
+}

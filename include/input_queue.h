@@ -9,55 +9,58 @@
 
 #include "game_input.h"
 
-constexpr int INPUT_QUEUE_LENGTH = 128;
-constexpr int DEFAULT_INPUT_SIZE = 4;
-
-class InputQueue 
+namespace GGPO
 {
-public:
-   InputQueue(int input_size = DEFAULT_INPUT_SIZE);
-   ~InputQueue();
+	 constexpr int INPUT_QUEUE_LENGTH = 128;
+	 constexpr int DEFAULT_INPUT_SIZE = 4;
 
-public:
-   void Init(int id, int input_size);
-   int GetLastConfirmedFrame();
-   int GetFirstIncorrectFrame() const;
+	 class InputQueue
+	 {
+	 public:
+		 InputQueue(int input_size = DEFAULT_INPUT_SIZE); //???? why do it like this lmfao y not just do it inside the constructor body lol
+		 ~InputQueue();
 
-   int 
-	   GetLength()
-	   const
-   { 
-	   return _length; 
-   }
+	 public:
+		 void Init(int id, int input_size);
+		 int GetLastConfirmedFrame();
+		 int GetFirstIncorrectFrame() const;
 
-   void SetFrameDelay(int delay) { _frame_delay = delay; }
-   void ResetPrediction(int frame);
-   void DiscardConfirmedFrames(int frame);
-   bool GetConfirmedInput(int frame, GameInput *input);
-   bool GetInput(int frame, GameInput *input);
-   void AddInput(GameInput &input);
+		 int
+			 GetLength()
+			 const
+		 {
+			 return _length;
+		 }
 
-protected:
-   int AdvanceQueueHead(int frame);
-   void AddDelayedInputToQueue(GameInput &input, int i);
+		 void SetFrameDelay(int delay) { _frame_delay = delay; }
+		 void ResetPrediction(int frame);
+		 void DiscardConfirmedFrames(int frame);
+		 bool GetConfirmedInput(int frame, GameInput* input);
+		 bool GetInput(int frame, GameInput* input);
+		 void AddInput(GameInput& input);
 
-protected:
-   int                  _id;
-   int                  _head;
-   int                  _tail;
-   int                  _length;
-   bool                 _first_frame;
+	 protected:
+		 int AdvanceQueueHead(int frame);
+		 void AddDelayedInputToQueue(GameInput& input, int i);
 
-   int                  _last_user_added_frame;
-   int                  _last_added_frame;
-   int                  _first_incorrect_frame;
-   int                  _last_frame_requested;
+	 protected:
+		 int                  _id;
+		 int                  _head;
+		 int                  _tail;
+		 int                  _length;
+		 bool                 _first_frame;
 
-   int                  _frame_delay;
+		 int                  _last_user_added_frame;
+		 int                  _last_added_frame;
+		 int                  _first_incorrect_frame;
+		 int                  _last_frame_requested;
 
-   GameInput            _inputs[INPUT_QUEUE_LENGTH];
-   GameInput            _prediction;
-};
+		 int                  _frame_delay;
+
+		 GameInput            _inputs[INPUT_QUEUE_LENGTH];
+		 GameInput            _prediction;
+	 };
+}
 
 
 
