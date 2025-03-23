@@ -13,7 +13,7 @@
 #include "game_input.h"
 #include "timesync.h"
 #include "ggponet.h"
-#include "ring_buffer.h"
+#include "Buffers.h"
 
 namespace GGPO
 {

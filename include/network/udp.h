@@ -10,37 +10,37 @@
 #include "poll.h"
 #include "udp_msg.h"
 #include "ggponet.h"
-#include "ring_buffer.h"
+#include "Buffers.h"
 
 namespace GGPO
 {
-#if defined(_WIN32) || defined(_WIN64)
-#include <winsock2.h>
-#include <ws2tcpip.h>
+    #if defined(_WIN32) || defined(_WIN64)
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
 
-     typedef SOCKET GGPO_SOCKET;
-#define GGPO_INVALID_SOCKET (SOCKET)(~0)
+         typedef SOCKET GGPO_SOCKET;
+    #define GGPO_INVALID_SOCKET (SOCKET)(~0)
 
-#define GGPO_GET_LAST_ERROR() WSAGetLastError()
-#define GGPO_CLOSE_SOCKET(__arg) closesocket(__arg)
-#define GGPO_SOCKET_ERROR_CODE WSAEWOULDBLOCK
-#else
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
+    #define GGPO_GET_LAST_ERROR() WSAGetLastError()
+    #define GGPO_CLOSE_SOCKET(__arg) closesocket(__arg)
+    #define GGPO_SOCKET_ERROR_CODE WSAEWOULDBLOCK
+    #else
+        #include <sys/types.h>
+        #include <sys/socket.h>
+        #include <netinet/in.h>
+        #include <arpa/inet.h>
+        #include <fcntl.h>
+        #include <unistd.h>
+        #include <errno.h>
 
 
-     typedef uint64_t GGPO_SOCKET;
-#define GGPO_INVALID_SOCKET (-1)
+        typedef uint64_t GGPO_SOCKET;
+        #define GGPO_INVALID_SOCKET (-1)
 
-#define GGPO_GET_LAST_ERROR() errno
-#define GGPO_CLOSE_SOCKET(__arg) close(__arg)
-#define GGPO_SOCKET_ERROR_CODE EWOULDBLOCK
-#endif
+        #define GGPO_GET_LAST_ERROR() errno
+        #define GGPO_CLOSE_SOCKET(__arg) close(__arg)
+        #define GGPO_SOCKET_ERROR_CODE EWOULDBLOCK
+    #endif
 
      constexpr auto GGPO_SOCKET_ERROR(-1);
      constexpr auto MAX_UDP_ENDPOINTS(16);

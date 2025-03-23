@@ -7,7 +7,6 @@
 
 #include "../include/platform_common.h"
 #include "../include/network/udp_proto.h"
-#include "../include/bitvector.h"
 
 namespace GGPO
 {
@@ -109,7 +108,7 @@ namespace GGPO
                   * (better, but still ug).  For the meantime, make this queue really big to decrease
                   * the odds of this happening...
                   */
-                 _pending_output.push(input);
+                 _pending_output.SafePush(input);
              }
              SendPendingOutput();
          }
@@ -123,19 +122,19 @@ namespace GGPO
          uint8_t* bits;
          GameInput last;
 
-         if (_pending_output.size())
+         if (_pending_output.CurrentSize())
          {
              last = _last_acked_input;
              bits = msg->u.input.bits;
 
-             msg->u.input.start_frame = _pending_output.front().frame;
-             msg->u.input.input_size = (uint8_t)_pending_output.front().size;
+             msg->u.input.start_frame = _pending_output.Front().frame;
+             msg->u.input.input_size = (uint8_t)_pending_output.Front().size;
 
              ASSERT(last.frame == -1 || last.frame + 1 == msg->u.input.start_frame);
 
-             for (j = 0; j < _pending_output.size(); j++)
+             for (j = 0; j < _pending_output.CurrentSize(); j++)
              {
-                 GameInput& current = _pending_output.item(j);
+                 GameInput& current = _pending_output.At(j);
 
                  if (memcmp(current.bits, last.bits, current.size) != 0)
                  {
@@ -193,13 +192,13 @@ namespace GGPO
      bool
          UdpProtocol::GetEvent(UdpProtocol::Event& e)
      {
-         if (_event_queue.size() == 0)
+         if (_event_queue.CurrentSize() == 0)
          {
              return false;
          }
 
-         e = _event_queue.front();
-         _event_queue.pop();
+         e = _event_queue.Front();
+         _event_queue.Pop();
 
          return true;
      }
@@ -325,7 +324,7 @@ namespace GGPO
          msg->hdr.magic = _magic_number;
          msg->hdr.sequence_number = _next_send_seq++;
 
-         _send_queue.push(QueueEntry(Platform::GetCurrentTimeMS(), _peer_addr, msg));
+         _send_queue.SafePush(QueueEntry(Platform::GetCurrentTimeMS(), _peer_addr, msg));
          PumpSendQueue();
      }
 
@@ -366,8 +365,8 @@ namespace GGPO
 
          // filter out messages that don't match what we expect
          uint16_t seq = msg->hdr.sequence_number;
-         if (msg->hdr.type != UdpMsg::SyncRequest and
-             msg->hdr.type != UdpMsg::SyncReply)
+
+         if (msg->hdr.type != UdpMsg::SyncRequest and msg->hdr.type != UdpMsg::SyncReply)
          {
              if (msg->hdr.magic != _remote_magic_number)
              {
@@ -446,7 +445,7 @@ namespace GGPO
          UdpProtocol::QueueEvent(const UdpProtocol::Event& evt)
      {
          LogEvent("Queuing event", evt);
-         _event_queue.push(evt);
+         _event_queue.SafePush(evt);
      }
 
      void
@@ -707,11 +706,11 @@ namespace GGPO
          /*
           * Get rid of our buffered input
           */
-         while (_pending_output.size() and _pending_output.front().frame < msg->u.input.ack_frame)
+         while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input.ack_frame)
          {
-             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.front().frame), "udp_proto.cpp", "info");
-             _last_acked_input = _pending_output.front();
-             _pending_output.pop();
+             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", "info");
+             _last_acked_input = _pending_output.Front();
+             _pending_output.Pop();
          }
          return true;
      }
@@ -723,11 +722,11 @@ namespace GGPO
          /*
           * Get rid of our buffered input
           */
-         while (_pending_output.size() and _pending_output.front().frame < msg->u.input_ack.ack_frame)
+         while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input_ack.ack_frame)
          {
-             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.front().frame), "udp_proto.cpp", "info");
-             _last_acked_input = _pending_output.front();
-             _pending_output.pop();
+             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", "info");
+             _last_acked_input = _pending_output.Front();
+             _pending_output.Pop();
          }
 
          return true;
@@ -762,7 +761,7 @@ namespace GGPO
          UdpProtocol::GetNetworkStats(struct NetworkStats* s) //wow great variable name tony GOOD FUCKING NAME
      {
          s->network.ping = _round_trip_time;
-         s->network.send_queue_len = _pending_output.size();
+         s->network.send_queue_len = _pending_output.CurrentSize();
          s->network.kbps_sent = _kbps_sent;
          s->timesync.remote_frames_behind = _remote_frame_advantage;
          s->timesync.local_frames_behind = _local_frame_advantage;
@@ -810,16 +809,18 @@ namespace GGPO
      void
          UdpProtocol::PumpSendQueue()
      {
-         while (not _send_queue.empty())
+         while (not _send_queue.IsEmpty())
          {
-             QueueEntry& entry = _send_queue.front();
+             QueueEntry& entry = _send_queue.Front();
 
              if (_send_latency)
              {
                  // should really come up with a gaussian distributation based on the configured
                  // value, but this will do for now.
                  int jitter = (_send_latency * 2 / 3) + ((rand() % _send_latency) / 3);
-                 if (Platform::GetCurrentTimeMS() < _send_queue.front().queue_time + jitter) {
+
+                 if (Platform::GetCurrentTimeMS() < _send_queue.Front().queue_time + jitter) 
+                 {
                      break;
                  }
              }
@@ -844,12 +845,12 @@ namespace GGPO
              {
                  ASSERT(entry.dest_addr.sin_addr.s_addr);
 
-                 _udp->SendTo((char*)entry.msg, entry.msg->PacketSize(), 0,
-                     (struct sockaddr*)&entry.dest_addr, sizeof entry.dest_addr);
+                 _udp->SendTo((char*)entry.msg, entry.msg->PacketSize(), 0, (struct sockaddr*)&entry.dest_addr, sizeof entry.dest_addr);
 
                  delete entry.msg;
              }
-             _send_queue.pop();
+
+             _send_queue.Pop();
          }
          if (_oo_packet.msg and _oo_packet.send_time < Platform::GetCurrentTimeMS())
          {
@@ -865,10 +866,10 @@ namespace GGPO
      void
          UdpProtocol::ClearSendQueue()
      {
-         while (not _send_queue.empty())
+         while (not _send_queue.IsEmpty())
          {
-             delete _send_queue.front().msg;
-             _send_queue.pop();
+             delete _send_queue.Front().msg;
+             _send_queue.Pop();
          }
      }
 }

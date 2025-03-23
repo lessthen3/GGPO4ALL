@@ -7,13 +7,13 @@
 
 #pragma once
 
-#include "static_buffer.h"
+#include <platform_common.h>
+#include <Buffers.h>
 
 namespace GGPO
 {
 
     constexpr int MAX_POLLABLE_HANDLES = 64;
-
 
      class IPollSink 
      {
@@ -62,8 +62,8 @@ namespace GGPO
          HANDLE            _handles[MAX_POLLABLE_HANDLES];
          PollSinkCb        _handle_sinks[MAX_POLLABLE_HANDLES];
 
-         StaticBuffer<PollSinkCb, 16>          _msg_sinks;
-         StaticBuffer<PollSinkCb, 16>          _loop_sinks;
-         StaticBuffer<PollPeriodicSinkCb, 16>  _periodic_sinks;
+         FixedPushBuffer<PollSinkCb, 16>          _msg_sinks;
+         FixedPushBuffer<PollSinkCb, 16>          _loop_sinks;
+         FixedPushBuffer<PollPeriodicSinkCb, 16>  _periodic_sinks;
      };
 }

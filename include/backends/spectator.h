@@ -10,7 +10,7 @@
 #include "platform_common.h"
 #include "poll.h"
 #include "sync.h"
-#include "backend.h"
+#include "Session.h"
 #include "timesync.h"
 #include "network/udp_proto.h"
 
@@ -18,7 +18,7 @@ namespace GGPO
 {
 	constexpr int SPECTATOR_FRAME_BUFFER_SIZE = 64;
 
-	 class SpectatorBackend : public IQuarkBackend, IPollSink, Udp::Callbacks 
+	 class SpectatorBackend : public Session, IPollSink, Udp::Callbacks
 	 {
 	 public:
 		 SpectatorBackend(const char* gamename, uint16_t localport, int num_players, int input_size, char* hostip, uint16_t hostport);

@@ -11,9 +11,9 @@ namespace GGPO
 {
      SyncTestBackend::SyncTestBackend
      (
-         char* gamename,
-         int frames,
-         int num_players
+         string gamename,
+         const int frames,
+         const int num_players
      ) :
          _sync(NULL)
      {
@@ -23,7 +23,7 @@ namespace GGPO
          _rollingback = false;
          _running = false;
          _current_input.erase();
-         strcpy_s(_game, gamename);
+         pm_GameName = gamename;
 
          /*
           * Initialize the synchronziation layer
@@ -43,7 +43,7 @@ namespace GGPO
      }
 
      ErrorCode
-         SyncTestBackend::DoPoll(int timeout)
+         SyncTestBackend::DoPoll()
      {
          if (not _running)
          {
@@ -96,7 +96,7 @@ namespace GGPO
      {
          if (_rollingback) //HERES THE THING
          {
-             _last_input = _saved_frames.front().input;
+             _last_input = _saved_frames.Front().input;
          }
          else
          {
@@ -141,7 +141,7 @@ namespace GGPO
          info.buf = (_sync.GetLastSavedFrame().buf);
          info.checksum = _sync.GetLastSavedFrame().checksum;
 
-         _saved_frames.push(info);
+         _saved_frames.SafePush(info);
 
          if (frame - _last_verified == _check_distance)
          {
@@ -151,16 +151,16 @@ namespace GGPO
 
              _rollingback = true;
 
-             while (not _saved_frames.empty())
+             while (not _saved_frames.IsEmpty())
              {
                  _callbacks.advance_frame(0);
 
                  // Verify that the checksumn of this frame is the same as the one in our
                  // list.
-                 info = _saved_frames.front();
-                 _saved_frames.pop();
+                 info = _saved_frames.Front();
+                 _saved_frames.Pop();
 
-                 if (info.frame != _sync.GetFrameCount())
+                 if (info.frame != _sync.GetFrameCount()) //REPLACE THIS WITH AN IMMEDIATE END SESSION CALL INSTEAD OF CRASHING THE ENTIRE PROGRAM LMFAO
                  {
                      logger->LogAndPrint(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", "error");
                      logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", "error");

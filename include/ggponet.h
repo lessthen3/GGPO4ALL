@@ -103,21 +103,21 @@ namespace GGPO
      {
          switch (fp_ErrorCode)
          {
-         case ErrorCode::OK: return "No error.";
-         case ErrorCode::GENERAL_FAILURE: return "General failure.";
-         case ErrorCode::INVALID_SESSION: return "Invalid session.";
-         case ErrorCode::INVALID_PLAYER_HANDLE: return "Invalid player handle.";
-         case ErrorCode::PLAYER_OUT_OF_RANGE: return "Player out of range.";
-         case ErrorCode::PREDICTION_THRESHOLD: return "Prediction threshold exceeded.";
-         case ErrorCode::UNSUPPORTED: return "Unsupported operation.";
-         case ErrorCode::NOT_SYNCHRONIZED: return "Not synchronized.";
-         case ErrorCode::IN_ROLLBACK: return "Currently in rollback.";
-         case ErrorCode::INPUT_DROPPED: return "Input was dropped.";
-         case ErrorCode::PLAYER_DISCONNECTED: return "Player disconnected.";
-         case ErrorCode::TOO_MANY_SPECTATORS: return "Too many spectators connected.";
-         case ErrorCode::INVALID_REQUEST: return "Invalid request.";
-         case ErrorCode::FATAL_DESYNC: return "Fatal desynchronization detected!";
-         default: return "Unknown  error.";
+             case ErrorCode::OK: return "No error.";
+             case ErrorCode::GENERAL_FAILURE: return "General failure.";
+             case ErrorCode::INVALID_SESSION: return "Invalid session.";
+             case ErrorCode::INVALID_PLAYER_HANDLE: return "Invalid player handle.";
+             case ErrorCode::PLAYER_OUT_OF_RANGE: return "Player out of range.";
+             case ErrorCode::PREDICTION_THRESHOLD: return "Prediction threshold exceeded.";
+             case ErrorCode::UNSUPPORTED: return "Unsupported operation.";
+             case ErrorCode::NOT_SYNCHRONIZED: return "Not synchronized.";
+             case ErrorCode::IN_ROLLBACK: return "Currently in rollback.";
+             case ErrorCode::INPUT_DROPPED: return "Input was dropped.";
+             case ErrorCode::PLAYER_DISCONNECTED: return "Player disconnected.";
+             case ErrorCode::TOO_MANY_SPECTATORS: return "Too many spectators connected.";
+             case ErrorCode::INVALID_REQUEST: return "Invalid request.";
+             case ErrorCode::FATAL_DESYNC: return "Fatal desynchronization detected!";
+             default: return "Unknown  error.";
          }
      }
 
@@ -174,15 +174,15 @@ namespace GGPO
      {
          switch (fp_EventCode)
          {
-         case EventCode::ConnectedToPeer:        return "ConnectedToPeer";
-         case EventCode::SynchronizingWithPeer:  return "SynchronizingWithPeer";
-         case EventCode::SynchronizedWithPeer:  return "SynchronizedWithPeer";
-         case EventCode::Running:                   return "Running";
-         case EventCode::DisconnectedFromPeer:  return "DisconnectedFromPeer";
-         case EventCode::TimeSync:                return "TimeSync";
-         case EventCode::ConnectionInterrupted:  return "ConnectionInterrupted";
-         case EventCode::ConnectionResumed:      return "ConnectionResumed";
-         default:                                            return "UnknownEvent";
+             case EventCode::ConnectedToPeer:        return "ConnectedToPeer";
+             case EventCode::SynchronizingWithPeer:  return "SynchronizingWithPeer";
+             case EventCode::SynchronizedWithPeer:  return "SynchronizedWithPeer";
+             case EventCode::Running:                   return "Running";
+             case EventCode::DisconnectedFromPeer:  return "DisconnectedFromPeer";
+             case EventCode::TimeSync:                return "TimeSync";
+             case EventCode::ConnectionInterrupted:  return "ConnectionInterrupted";
+             case EventCode::ConnectionResumed:      return "ConnectionResumed";
+             default:                                            return "UnknownEvent";
          }
      }
 

@@ -329,10 +329,10 @@ namespace GGPO
      bool
          Sync::GetEvent(Event& e)
      {
-         if (_event_queue.size())
+         if (_event_queue.CurrentSize())
          {
-             e = _event_queue.front();
-             _event_queue.pop();
+             e = _event_queue.Front();
+             _event_queue.Pop();
              return true;
          }
 

@@ -28,7 +28,5 @@ namespace GGPO
 		 virtual ErrorCode SetDisconnectTimeout(int timeout) { return ErrorCode::UNSUPPORTED; }
 		 virtual ErrorCode SetDisconnectNotifyStart(int timeout) { return ErrorCode::UNSUPPORTED; }
 	 };
-
-	 typedef struct Session Quark, IQuarkBackend; /* XXX: nuke this */
 }
 

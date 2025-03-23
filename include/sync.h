@@ -11,7 +11,7 @@
 #include "ggponet.h"
 #include "game_input.h"
 #include "input_queue.h"
-#include "ring_buffer.h"
+#include "Buffers.h"
 #include "network/udp_msg.h"
 
 namespace GGPO

@@ -10,13 +10,13 @@
 #include "platform_common.h"
 #include "poll.h"
 #include "sync.h"
-#include "backend.h"
+#include "Session.h"
 #include "timesync.h"
 #include "network/udp_proto.h"
 
 namespace GGPO
 {
-	 class Peer2PeerBackend : public IQuarkBackend, IPollSink, Udp::Callbacks
+	 class Peer2PeerBackend : public Session, IPollSink, Udp::Callbacks
 	 {
 	 public:
 		 Peer2PeerBackend(const char* gamename, uint16_t localport, int num_players, int input_size);

@@ -43,18 +43,18 @@ namespace GGPO
              void* cookie
          )
      {
-         _msg_sinks.push_back(PollSinkCb(sink, cookie));
+         _msg_sinks.PushBack(PollSinkCb(sink, cookie));
      }
 
      void
          Poll::RegisterLoop(IPollSink* sink, void* cookie)
      {
-         _loop_sinks.push_back(PollSinkCb(sink, cookie));
+         _loop_sinks.PushBack(PollSinkCb(sink, cookie));
      }
      void
          Poll::RegisterPeriodic(IPollSink* sink, int interval, void* cookie)
      {
-         _periodic_sinks.push_back(PollPeriodicSinkCb(sink, cookie, interval));
+         _periodic_sinks.PushBack(PollPeriodicSinkCb(sink, cookie, interval));
      }
 
      void
@@ -93,13 +93,13 @@ namespace GGPO
              finished = not _handle_sinks[i].sink->OnHandlePoll(_handle_sinks[i].cookie) or finished;
          }
 
-         for (i = 0; i < _msg_sinks.size(); i++)
+         for (i = 0; i < _msg_sinks.CurrentSize(); i++)
          {
              PollSinkCb& cb = _msg_sinks[i];
              finished = not cb.sink->OnMsgPoll(cb.cookie) or finished;
          }
 
-         for (i = 0; i < _periodic_sinks.size(); i++)
+         for (i = 0; i < _periodic_sinks.CurrentSize(); i++)
          {
              PollPeriodicSinkCb& cb = _periodic_sinks[i];
 
@@ -110,7 +110,7 @@ namespace GGPO
              }
          }
 
-         for (i = 0; i < _loop_sinks.size(); i++)
+         for (i = 0; i < _loop_sinks.CurrentSize(); i++)
          {
              PollSinkCb& cb = _loop_sinks[i];
              finished = not cb.sink->OnLoopPoll(cb.cookie) or finished;
@@ -123,7 +123,7 @@ namespace GGPO
          Poll::ComputeWaitTime(int elapsed)
      {
          int waitTime = INFINITE;
-         size_t count = _periodic_sinks.size();
+         size_t count = _periodic_sinks.CurrentSize();
 
          if (count > 0)
          {

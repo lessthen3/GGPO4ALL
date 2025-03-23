@@ -8,19 +8,19 @@
 #pragma once
 
 #include "platform_common.h"
-#include "backend.h"
+#include "Session.h"
 #include "sync.h"
-#include "ring_buffer.h"
+#include "Buffers.h"
 
 namespace GGPO
 {
-     class SyncTestBackend : public IQuarkBackend
+     class SyncTestBackend : public Session
      {
      public:
-         SyncTestBackend(char* gamename, int frames, int num_players);
+         SyncTestBackend(string gamename, const int frames, const int num_players);
          virtual ~SyncTestBackend();
 
-         virtual ErrorCode DoPoll(int timeout);
+         virtual ErrorCode DoPoll();
          virtual ErrorCode AddPlayer(Player* player, PlayerHandle* handle);
          virtual ErrorCode AddLocalInput(PlayerHandle player, void* values, int size);
          virtual ErrorCode SyncInput(void* values, int size, int* disconnect_flags);
@@ -44,7 +44,7 @@ namespace GGPO
          int                    _last_verified;
          bool                   _rollingback;
          bool                   _running;
-         char                   _game[128];
+         string                   pm_GameName;
 
          GameInput                  _current_input;
          GameInput                  _last_input;

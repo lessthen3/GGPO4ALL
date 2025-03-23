@@ -211,8 +211,8 @@ namespace GGPO
          * These next two lines simply verify that inputs are passed in
          * sequentially by the user, regardless of frame delay.
          */
-         ASSERT(_last_user_added_frame == GameInput::NullFrame ||
-             input.frame == _last_user_added_frame + 1);
+         ASSERT(_last_user_added_frame == GameInput::NullFrame || input.frame == _last_user_added_frame + 1);
+
          _last_user_added_frame = input.frame;
 
          /*
@@ -266,7 +266,7 @@ namespace GGPO
              * remember the first input which was incorrect so we can report it
              * in GetFirstIncorrectFrame()
              */
-             if (_first_incorrect_frame == GameInput::NullFrame && !_prediction.equal(input, true))
+             if (_first_incorrect_frame == GameInput::NullFrame and not _prediction.equal(input, true))
              {
                  logger->LogAndPrint(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp", "info");
                  _first_incorrect_frame = frame_number;
@@ -278,7 +278,7 @@ namespace GGPO
              * of predition mode entirely!  Otherwise, advance the prediction frame
              * count up.
              */
-             if (_prediction.frame == _last_frame_requested && _first_incorrect_frame == GameInput::NullFrame)
+             if (_prediction.frame == _last_frame_requested and _first_incorrect_frame == GameInput::NullFrame)
              {
                  logger->LogAndPrint("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp", "info");
                  _prediction.frame = GameInput::NullFrame;
