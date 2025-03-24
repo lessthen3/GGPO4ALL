@@ -72,7 +72,7 @@ namespace GGPO
          // sleep for.
          int sleep_frames = (int)(((radvantage - advantage) / 2) + 0.5);
 
-         logger->LogAndPrint(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp", "info");
+         logger->LogAndPrint(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp", LogManager::LogLevel::Info);
 
          // Some things just aren't worth correcting for.  Make sure
          // the difference is relevant before proceeding.
@@ -91,7 +91,7 @@ namespace GGPO
              {
                  if (not _last_inputs[i].equal(_last_inputs[0], true))
                  {
-                     logger->LogAndPrint(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp", "info");
+                     logger->LogAndPrint(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp", LogManager::LogLevel::Info);
                      return 0;
                  }
              }

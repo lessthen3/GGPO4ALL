@@ -223,7 +223,7 @@ namespace GGPO
              next_interval = (_state.sync.roundtrips_remaining == NUM_SYNC_PACKETS) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
              if (_last_send_time and _last_send_time + next_interval < now)
              {
-                 logger->LogAndPrint(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp", "info");
+                 logger->LogAndPrint(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp", LogManager::LogLevel::Info);
                  SendSyncRequest();
              }
              break;
@@ -232,7 +232,7 @@ namespace GGPO
              // xxx: rig all this up with a timer wrapper
              if (not _state.running.last_input_packet_recv_time or _state.running.last_input_packet_recv_time + RUNNING_RETRY_INTERVAL < now)
              {
-                 logger->LogAndPrint(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp", "info");
+                 logger->LogAndPrint(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp", LogManager::LogLevel::Info);
                  SendPendingOutput();
                  _state.running.last_input_packet_recv_time = now;
              }
@@ -254,7 +254,7 @@ namespace GGPO
 
              if (_last_send_time and _last_send_time + KEEP_ALIVE_INTERVAL < now)
              {
-                 logger->LogAndPrint("Sending keep alive packet", "udp_proto.cpp", "info");
+                 logger->LogAndPrint("Sending keep alive packet", "udp_proto.cpp", LogManager::LogLevel::Info);
                  SendMsg(new UdpMsg(UdpMsg::KeepAlive));
              }
 
@@ -266,7 +266,7 @@ namespace GGPO
                      (_last_recv_time + _disconnect_notify_start < now)
                      )
              {
-                 logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp", "info");
+                 logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp", LogManager::LogLevel::Info);
                  Event e(Event::NetworkInterrupted);
                  e.u.network_interrupted.disconnect_timeout = _disconnect_timeout - _disconnect_notify_start;
                  QueueEvent(e);
@@ -277,7 +277,7 @@ namespace GGPO
              {
                  if (not _disconnect_event_sent)
                  {
-                     logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp", "info");
+                     logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp", LogManager::LogLevel::Info);
                      QueueEvent(Event(Event::Disconnected));
                      _disconnect_event_sent = true;
                  }
@@ -287,7 +287,7 @@ namespace GGPO
          case Disconnected:
              if (_shutdown_timeout < now)
              {
-                 logger->LogAndPrint("Shutting down udp connection.", "udp_proto.cpp", "info");
+                 logger->LogAndPrint("Shutting down udp connection.", "udp_proto.cpp", LogManager::LogLevel::Info);
                  _udp = NULL;
                  _shutdown_timeout = 0;
              }
@@ -379,7 +379,7 @@ namespace GGPO
              // Log("checking sequence number -> next - seq : %d - %d = %d\n", seq, _next_recv_seq, skipped);
              if (skipped > MAX_SEQ_DISTANCE)
              {
-                 logger->LogAndPrint(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp", "info");
+                 logger->LogAndPrint(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp", LogManager::LogLevel::Info);
                  return;
              }
          }
@@ -436,7 +436,7 @@ namespace GGPO
                  udp_overhead
              ),
              "udp_proto.cpp",
-             "info"
+             LogManager::LogLevel::Info
          );
      }
 
@@ -472,31 +472,31 @@ namespace GGPO
          switch (msg->hdr.type)
          {
          case UdpMsg::SyncRequest:
-             logger->LogAndPrint(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          case UdpMsg::SyncReply:
-             logger->LogAndPrint(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          case UdpMsg::QualityReport:
-             logger->LogAndPrint(format("{} quality report.", prefix), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} quality report.", prefix), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          case UdpMsg::QualityReply:
-             logger->LogAndPrint(format("{} quality reply.", prefix), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} quality reply.", prefix), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          case UdpMsg::KeepAlive:
-             logger->LogAndPrint(format("{} keep alive.", prefix), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} keep alive.", prefix), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          case UdpMsg::Input:
-             logger->LogAndPrint(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          case UdpMsg::InputAck:
-             logger->LogAndPrint(format("{} input ack.", prefix), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} input ack.", prefix), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
 
          default:
@@ -510,7 +510,7 @@ namespace GGPO
          switch (evt.type)
          {
          case UdpProtocol::Event::Synchronzied:
-             logger->LogAndPrint(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp", LogManager::LogLevel::Info);
              break;
          }
      }
@@ -527,7 +527,7 @@ namespace GGPO
      {
          if (_remote_magic_number != 0 and msg->hdr.magic != _remote_magic_number)
          {
-             logger->LogAndPrint(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp", "error");
+             logger->LogAndPrint(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp", LogManager::LogLevel::Error);
              return false;
          }
 
@@ -543,13 +543,13 @@ namespace GGPO
      {
          if (_current_state != Syncing)
          {
-             logger->LogAndPrint("Ignoring SyncReply while not synching.", "udp_proto.cpp", "info");
+             logger->LogAndPrint("Ignoring SyncReply while not synching.", "udp_proto.cpp", LogManager::LogLevel::Info);
              return msg->hdr.magic == _remote_magic_number;
          }
 
          if (msg->u.sync_reply.random_reply != _state.sync.random)
          {
-             logger->LogAndPrint(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp", LogManager::LogLevel::Info);
              return false;
          }
 
@@ -559,11 +559,11 @@ namespace GGPO
              _connected = true;
          }
 
-         logger->LogAndPrint(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp", "info");
+         logger->LogAndPrint(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp", LogManager::LogLevel::Info);
 
          if (--_state.sync.roundtrips_remaining == 0)
          {
-             logger->LogAndPrint("Synchronized!", "udp_proto.cpp", "info");
+             logger->LogAndPrint("Synchronized!", "udp_proto.cpp", LogManager::LogLevel::Info);
              QueueEvent(UdpProtocol::Event(UdpProtocol::Event::Synchronzied));
              _current_state = Running;
              _last_received_input.frame = -1;
@@ -593,7 +593,7 @@ namespace GGPO
          {
              if (_current_state != Disconnected and not _disconnect_event_sent)
              {
-                 logger->LogAndPrint("Disconnecting endpoint on remote request.", "udp_proto.cpp", "info");
+                 logger->LogAndPrint("Disconnecting endpoint on remote request.", "udp_proto.cpp", LogManager::LogLevel::Info);
                  QueueEvent(Event(Event::Disconnected));
                  _disconnect_event_sent = true;
              }
@@ -685,13 +685,13 @@ namespace GGPO
 
                      _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
 
-                     logger->LogAndPrint(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp", "info");
+                     logger->LogAndPrint(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp", LogManager::LogLevel::Info);
                      QueueEvent(evt);
 
                  }
                  else
                  {
-                     logger->LogAndPrint(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp", "info");
+                     logger->LogAndPrint(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp", LogManager::LogLevel::Info);
                  }
 
                  /*
@@ -708,7 +708,7 @@ namespace GGPO
           */
          while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input.ack_frame)
          {
-             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", LogManager::LogLevel::Info);
              _last_acked_input = _pending_output.Front();
              _pending_output.Pop();
          }
@@ -724,7 +724,7 @@ namespace GGPO
           */
          while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input_ack.ack_frame)
          {
-             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", "info");
+             logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", LogManager::LogLevel::Info);
              _last_acked_input = _pending_output.Front();
              _pending_output.Pop();
          }
@@ -830,7 +830,7 @@ namespace GGPO
 
                  if (entry.msg) //check for a nullptr dereference
                  {
-                     logger->LogAndPrint(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp", "info");
+                     logger->LogAndPrint(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp", LogManager::LogLevel::Info);
                  }
                  else
                  {
@@ -854,7 +854,7 @@ namespace GGPO
          }
          if (_oo_packet.msg and _oo_packet.send_time < Platform::GetCurrentTimeMS())
          {
-             logger->LogAndPrint("sending rogue oop!", "udp_proto.cpp", "info");
+             logger->LogAndPrint("sending rogue oop!", "udp_proto.cpp", LogManager::LogLevel::Info);
 
              _udp->SendTo((char*)_oo_packet.msg, _oo_packet.msg->PacketSize(), 0, (struct sockaddr*)&_oo_packet.dest_addr, sizeof _oo_packet.dest_addr);
 

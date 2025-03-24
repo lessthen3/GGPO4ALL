@@ -123,7 +123,7 @@ namespace GGPO
          _sync.IncrementFrame();
          _current_input.erase();
 
-         logger->LogAndPrint(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", "info");
+         logger->LogAndPrint(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", LogManager::LogLevel::Info);
 
          if (_rollingback)
          {
@@ -162,8 +162,8 @@ namespace GGPO
 
                  if (info.frame != _sync.GetFrameCount()) //REPLACE THIS WITH AN IMMEDIATE END SESSION CALL INSTEAD OF CRASHING THE ENTIRE PROGRAM LMFAO
                  {
-                     logger->LogAndPrint(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", "error");
-                     logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", "error");
+                     logger->LogAndPrint(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", LogManager::LogLevel::Error);
+                     logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", LogManager::LogLevel::Error);
                      exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                  }
 
@@ -171,12 +171,12 @@ namespace GGPO
 
                  if (info.checksum != checksum)
                  {
-                     logger->LogAndPrint(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", "error");
-                     logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", "error");
+                     logger->LogAndPrint(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", LogManager::LogLevel::Error);
+                     logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", LogManager::LogLevel::Error);
                      exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                  }
 
-                 logger->LogAndPrint(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", "info");
+                 logger->LogAndPrint(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", LogManager::LogLevel::Info);
              }
 
              _last_verified = frame;
@@ -189,8 +189,8 @@ namespace GGPO
      void
          SyncTestBackend::LogSaveStates(SavedInfo& info)
      {
-         logger->LogAndPrint(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", "info");
+         logger->LogAndPrint(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", LogManager::LogLevel::Info);
 
-         logger->LogAndPrint(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", "info");
+         logger->LogAndPrint(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", LogManager::LogLevel::Info);
      }
 }

@@ -23,7 +23,7 @@ I chose to remove zlib as a dependency because I think that letting the end-user
 
 __GGPO4ALL does not handle serialization of data anymore__
 
-Instead GGPO4ALL expects all data to be fed in as a byte stream of serialized (and possibly compressed) data. All state information will be held in a FrameState struct. GGPO4ALL will use this raw byte data to track overall state and any sync issues that may occur during runtime.
+Instead GGPO4ALL expects all data to be fed in as a byte stream of serialized (and possibly compressed) data. GGPO4ALL will use this raw byte data to track overall state and any sync issues that may occur during runtime.
 
 __Sessions__
 

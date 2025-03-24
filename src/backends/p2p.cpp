@@ -140,7 +140,7 @@ namespace GGPO
                      total_min_confirmed = PollNPlayers(current_frame);
                  }
 
-                 logger->LogAndPrint(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", "info");
+                 logger->LogAndPrint(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
 
                  if (total_min_confirmed >= 0)
                  {
@@ -150,7 +150,7 @@ namespace GGPO
                      {
                          while (_next_spectator_frame <= total_min_confirmed)
                          {
-                             logger->LogAndPrint(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", "info");
+                             logger->LogAndPrint(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", LogManager::LogLevel::Info);
 
                              GameInput input;
                              input.frame = _next_spectator_frame;
@@ -165,7 +165,7 @@ namespace GGPO
                              _next_spectator_frame++;
                          }
                      }
-                     logger->LogAndPrint(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", "info");
+                     logger->LogAndPrint(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
 
                      _sync.SetLastConfirmedFrame(total_min_confirmed);
                  }
@@ -214,15 +214,15 @@ namespace GGPO
                  total_min_confirmed = MIN(_local_connect_status[i].last_frame, total_min_confirmed);
              }
 
-             logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", "info");
+             logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
 
              if (not queue_connected && not _local_connect_status[i].disconnected)
              {
-                 logger->LogAndPrint(format("disconnecting i {} by remote request.", i), "p2p.cpp", "info");
+                 logger->LogAndPrint(format("disconnecting i {} by remote request.", i), "p2p.cpp", LogManager::LogLevel::Info);
                  DisconnectPlayerQueue(i, total_min_confirmed);
              }
 
-             logger->LogAndPrint(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", "info");
+             logger->LogAndPrint(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
          }
          return total_min_confirmed;
      }
@@ -239,7 +239,7 @@ namespace GGPO
              bool queue_connected = true;
              int queue_min_confirmed = MAX_INT;
 
-             logger->LogAndPrint(format("considering queue {}.", queue), "p2p.cpp", "info");
+             logger->LogAndPrint(format("considering queue {}.", queue), "p2p.cpp", LogManager::LogLevel::Info);
 
              for (i = 0; i < _num_players; i++)
              {
@@ -252,11 +252,11 @@ namespace GGPO
 
                      queue_connected = queue_connected && connected;
                      queue_min_confirmed = MIN(last_received, queue_min_confirmed);
-                     logger->LogAndPrint(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", "info");
+                     logger->LogAndPrint(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
                  }
                  else
                  {
-                     logger->LogAndPrint(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", "info");
+                     logger->LogAndPrint(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", LogManager::LogLevel::Info);
                  }
              }
              // merge in our local status only if we're still connected!
@@ -265,7 +265,7 @@ namespace GGPO
                  queue_min_confirmed = MIN(_local_connect_status[queue].last_frame, queue_min_confirmed);
              }
 
-             logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", "info");
+             logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
 
              if (queue_connected)
              {
@@ -278,11 +278,11 @@ namespace GGPO
                  // and later receive a disconnect notification for frame n-1.
                  if (not _local_connect_status[queue].disconnected or _local_connect_status[queue].last_frame > queue_min_confirmed)
                  {
-                     logger->LogAndPrint(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", "info");
+                     logger->LogAndPrint(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", LogManager::LogLevel::Info);
                      DisconnectPlayerQueue(queue, queue_min_confirmed);
                  }
              }
-             logger->LogAndPrint(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", "info");
+             logger->LogAndPrint(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", LogManager::LogLevel::Info);
          }
          return total_min_confirmed;
      }
@@ -358,7 +358,7 @@ namespace GGPO
             // confirmed local frame for this player.  this must come first so it
             // gets incorporated into the next packet we send.
 
-             logger->LogAndPrint(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", "info");
+             logger->LogAndPrint(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", LogManager::LogLevel::Info);
              _local_connect_status[queue].last_frame = input.frame;
 
              // Send the input to all the remote players.
@@ -403,7 +403,7 @@ namespace GGPO
      ErrorCode
          Peer2PeerBackend::IncrementFrame(void)
      {
-         logger->LogAndPrint(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", "info");
+         logger->LogAndPrint(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", LogManager::LogLevel::Info);
          _sync.IncrementFrame();
          DoPoll(0);
          PollSyncEvents();
@@ -459,7 +459,7 @@ namespace GGPO
 
                  _sync.AddRemoteInput(queue, evt.u.input.input);
                  // Notify the other endpoints which frame we received from a peer
-                 logger->LogAndPrint(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", "info");
+                 logger->LogAndPrint(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", LogManager::LogLevel::Info);
                  _local_connect_status[queue].last_frame = evt.u.input.input.frame;
              }
              break;
@@ -564,7 +564,7 @@ namespace GGPO
              int current_frame = _sync.GetFrameCount();
              // xxx: we should be tracking who the local player is, but for now assume
              // that if the endpoint is not initalized, this must be the local player.
-             logger->LogAndPrint(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", "info");
+             logger->LogAndPrint(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", LogManager::LogLevel::Info);
              for (int i = 0; i < _num_players; i++)
              {
                  if (_endpoints[i].IsInitialized())
@@ -575,7 +575,7 @@ namespace GGPO
          }
          else
          {
-             logger->LogAndPrint(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", "info");
+             logger->LogAndPrint(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", LogManager::LogLevel::Info);
              DisconnectPlayerQueue(queue, _local_connect_status[queue].last_frame);
          }
          return ErrorCode::OK;
@@ -589,16 +589,16 @@ namespace GGPO
 
          _endpoints[queue].Disconnect();
 
-         logger->LogAndPrint(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", "info");
+         logger->LogAndPrint(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", LogManager::LogLevel::Info);
 
          _local_connect_status[queue].disconnected = 1;
          _local_connect_status[queue].last_frame = syncto;
 
          if (syncto < framecount)
          {
-             logger->LogAndPrint(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", "info");
+             logger->LogAndPrint(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", LogManager::LogLevel::Info);
              _sync.AdjustSimulation(syncto);
-             logger->LogAndPrint("finished adjusting simulation.", "p2p.cpp", "info");
+             logger->LogAndPrint("finished adjusting simulation.", "p2p.cpp", LogManager::LogLevel::Info);
          }
 
          info.code = EventCode::DisconnectedFromPeer;

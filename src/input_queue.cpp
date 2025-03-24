@@ -52,7 +52,7 @@ namespace GGPO
      int
          InputQueue::GetLastConfirmedFrame()
      {
-         logger->LogAndPrint(format("returning last confirmed frame {}.", _last_added_frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("returning last confirmed frame {}.", _last_added_frame), "input_queue.cpp", LogManager::LogLevel::Info);
          return _last_added_frame;
      }
 
@@ -73,7 +73,7 @@ namespace GGPO
              frame = MIN(frame, _last_frame_requested);
          }
 
-         logger->LogAndPrint(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp", LogManager::LogLevel::Info);
 
          if (frame >= _last_added_frame)
          {
@@ -83,14 +83,14 @@ namespace GGPO
          {
              int offset = frame - _inputs[_tail].frame + 1;
 
-             logger->LogAndPrint(format("difference of {} frames.", offset), "input_queue.cpp", "info");
+             logger->LogAndPrint(format("difference of {} frames.", offset), "input_queue.cpp", LogManager::LogLevel::Info);
              ASSERT(offset >= 0);
 
              _tail = (_tail + offset) % INPUT_QUEUE_LENGTH;
              _length -= offset;
          }
 
-         logger->LogAndPrint(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp", LogManager::LogLevel::Info);
          ASSERT(_length >= 0);
      }
 
@@ -99,7 +99,7 @@ namespace GGPO
      {
          ASSERT(_first_incorrect_frame == GameInput::NullFrame || frame <= _first_incorrect_frame);
 
-         logger->LogAndPrint(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp", LogManager::LogLevel::Info);
 
          /*
           * There's nothing really to do other than reset our prediction
@@ -129,7 +129,7 @@ namespace GGPO
      bool
          InputQueue::GetInput(int requested_frame, GameInput* input)
      {
-         logger->LogAndPrint(format("requesting input frame {}.", requested_frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("requesting input frame {}.", requested_frame), "input_queue.cpp", LogManager::LogLevel::Info);
 
          /*
          * No one should ever try to grab any input when we have a prediction
@@ -159,7 +159,7 @@ namespace GGPO
                  offset = (offset + _tail) % INPUT_QUEUE_LENGTH;
                  ASSERT(_inputs[offset].frame == requested_frame);
                  *input = _inputs[offset];
-                 logger->LogAndPrint(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp", "info");
+                 logger->LogAndPrint(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp", LogManager::LogLevel::Info);
                  return true;
              }
 
@@ -170,17 +170,17 @@ namespace GGPO
              */
              if (requested_frame == 0)
              {
-                 logger->LogAndPrint("basing new prediction frame from nothing, you're client wants frame 0.", "input_queue.cpp", "info");
+                 logger->LogAndPrint("basing new prediction frame from nothing, you're client wants frame 0.", "input_queue.cpp", LogManager::LogLevel::Info);
                  _prediction.erase();
              }
              else if (_last_added_frame == GameInput::NullFrame)
              {
-                 logger->LogAndPrint("basing new prediction frame from nothing, since we have no frames yet.", "input_queue.cpp", "info");
+                 logger->LogAndPrint("basing new prediction frame from nothing, since we have no frames yet.", "input_queue.cpp", LogManager::LogLevel::Info);
                  _prediction.erase();
              }
              else
              {
-                 logger->LogAndPrint(format("basing new prediction frame from previously added frame (queue entry:{}, frame:{}).", PREVIOUS_FRAME(_head), _inputs[PREVIOUS_FRAME(_head)].frame), "input_queue.cpp", "info");
+                 logger->LogAndPrint(format("basing new prediction frame from previously added frame (queue entry:{}, frame:{}).", PREVIOUS_FRAME(_head), _inputs[PREVIOUS_FRAME(_head)].frame), "input_queue.cpp", LogManager::LogLevel::Info);
                  _prediction = _inputs[PREVIOUS_FRAME(_head)];
              }
              _prediction.frame++;
@@ -195,7 +195,7 @@ namespace GGPO
          */
          *input = _prediction;
          input->frame = requested_frame;
-         logger->LogAndPrint(format("returning prediction frame number {} ({}).", input->frame, _prediction.frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("returning prediction frame number {} ({}).", input->frame, _prediction.frame), "input_queue.cpp", LogManager::LogLevel::Info);
 
          return false;
      }
@@ -205,7 +205,7 @@ namespace GGPO
      {
          int new_frame;
 
-         logger->LogAndPrint(format("adding input frame number {} to queue.", input.frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("adding input frame number {} to queue.", input.frame), "input_queue.cpp", LogManager::LogLevel::Info);
 
          /*
          * These next two lines simply verify that inputs are passed in
@@ -237,7 +237,7 @@ namespace GGPO
      void
          InputQueue::AddDelayedInputToQueue(GameInput& input, int frame_number)
      {
-         logger->LogAndPrint(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp", LogManager::LogLevel::Info);
 
          ASSERT(input.size == _prediction.size);
 
@@ -268,7 +268,7 @@ namespace GGPO
              */
              if (_first_incorrect_frame == GameInput::NullFrame and not _prediction.equal(input, true))
              {
-                 logger->LogAndPrint(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp", "info");
+                 logger->LogAndPrint(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp", LogManager::LogLevel::Info);
                  _first_incorrect_frame = frame_number;
              }
 
@@ -280,7 +280,7 @@ namespace GGPO
              */
              if (_prediction.frame == _last_frame_requested and _first_incorrect_frame == GameInput::NullFrame)
              {
-                 logger->LogAndPrint("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp", "info");
+                 logger->LogAndPrint("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp", LogManager::LogLevel::Info);
                  _prediction.frame = GameInput::NullFrame;
              }
              else
@@ -294,7 +294,7 @@ namespace GGPO
      int
          InputQueue::AdvanceQueueHead(int frame)
      {
-         logger->LogAndPrint(format("advancing queue head to frame {}.", frame), "input_queue.cpp", "info");
+         logger->LogAndPrint(format("advancing queue head to frame {}.", frame), "input_queue.cpp", LogManager::LogLevel::Info);
 
          int expected_frame = _first_frame ? 0 : _inputs[PREVIOUS_FRAME(_head)].frame + 1;
 
@@ -307,7 +307,7 @@ namespace GGPO
              * time we shoved a frame into the system.  In this case, there's
              * no room on the queue.  Toss it.
              */
-             logger->LogAndPrint(format("Dropping input frame {} (expected next frame to be {}).", frame, expected_frame), "input_queue.cpp", "info");
+             logger->LogAndPrint(format("Dropping input frame {} (expected next frame to be {}).", frame, expected_frame), "input_queue.cpp", LogManager::LogLevel::Info);
              return GameInput::NullFrame;
          }
 
@@ -319,7 +319,7 @@ namespace GGPO
              * last frame in the queue several times in order to fill the space
              * left.
              */
-             logger->LogAndPrint(format("Adding padding frame {} to account for change in frame delay.", expected_frame), "input_queue.cpp", "info");
+             logger->LogAndPrint(format("Adding padding frame {} to account for change in frame delay.", expected_frame), "input_queue.cpp", LogManager::LogLevel::Info);
              GameInput& last_frame = _inputs[PREVIOUS_FRAME(_head)];
              AddDelayedInputToQueue(last_frame, expected_frame);
              expected_frame++;

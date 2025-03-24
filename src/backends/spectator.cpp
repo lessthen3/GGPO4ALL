@@ -104,7 +104,7 @@ namespace GGPO
      ErrorCode
          SpectatorBackend::IncrementFrame(void)
      {
-         logger->LogAndPrint(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", "info");
+         logger->LogAndPrint(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", LogManager::LogLevel::Info);
          DoPoll(0);
          PollUdpProtocolEvents();
 

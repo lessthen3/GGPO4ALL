@@ -50,8 +50,10 @@ namespace GGPO
          Sync::SetLastConfirmedFrame(int frame)
      {
          _last_confirmed_frame = frame;
-         if (_last_confirmed_frame > 0) {
-             for (int i = 0; i < _config.num_players; i++) {
+         if (_last_confirmed_frame > 0) 
+         {
+             for (int i = 0; i < _config.num_players; i++) 
+             {
                  _input_queues[i].DiscardConfirmedFrames(frame - 1);
              }
          }
@@ -64,7 +66,7 @@ namespace GGPO
 
          if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames)
          {
-             logger->LogAndPrint("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", "info");
+             logger->LogAndPrint("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", LogManager::LogLevel::Info);
              return false;
          }
 
@@ -73,7 +75,7 @@ namespace GGPO
              SaveCurrentFrame();
          }
 
-         logger->LogAndPrint(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", "info");
+         logger->LogAndPrint(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", LogManager::LogLevel::Info);
 
          input.frame = _framecount;
          _input_queues[queue].AddInput(input);
@@ -127,7 +129,7 @@ namespace GGPO
          {
              GameInput input;
 
-             if (_local_connect_status[i].disconnected && _framecount > _local_connect_status[i].last_frame)
+             if (_local_connect_status[i].disconnected and _framecount > _local_connect_status[i].last_frame)
              {
                  disconnect_flags |= (1 << i);
                  input.erase();
@@ -164,7 +166,7 @@ namespace GGPO
          int framecount = _framecount;
          int count = _framecount - seek_to;
 
-         logger->LogAndPrint("Catching up", "sync.cpp", "info");
+         logger->LogAndPrint("Catching up", "sync.cpp", LogManager::LogLevel::Info);
          _rollingback = true;
 
          /*
@@ -188,7 +190,7 @@ namespace GGPO
 
          _rollingback = false;
 
-         logger->LogAndPrint("---", "sync.cpp", "info"); //?????????????????????????
+         logger->LogAndPrint("---", "sync.cpp", LogManager::LogLevel::Info); //?????????????????????????
      }
 
      void
@@ -197,7 +199,7 @@ namespace GGPO
          // find the frame in question
          if (frame == _framecount)
          {
-             logger->LogAndPrint("Skipping NOP.", "sync.cpp", "info");
+             logger->LogAndPrint("Skipping NOP.", "sync.cpp", LogManager::LogLevel::Info);
              return;
          }
 
@@ -205,9 +207,9 @@ namespace GGPO
          _savedstate.head = FindSavedFrameIndex(frame);
          SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-         logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
+         logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", LogManager::LogLevel::Info);
 
-         ASSERT(state->buf && state->cbuf);
+         ASSERT(state->buf and state->cbuf);
 
          _callbacks.load_game_state(state->buf);
 
@@ -229,7 +231,7 @@ namespace GGPO
          state->frame = _framecount;
          _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
-         logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", "info");
+         logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", LogManager::LogLevel::Info);
          _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
      }
 
@@ -290,7 +292,7 @@ namespace GGPO
          for (int i = 0; i < _config.num_players; i++)
          {
              int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-             logger->LogAndPrint(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", "info");
+             logger->LogAndPrint(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", LogManager::LogLevel::Info);
 
              if (incorrect != GameInput::NullFrame and (first_incorrect == GameInput::NullFrame or incorrect < first_incorrect))
              {
@@ -300,7 +302,7 @@ namespace GGPO
 
          if (first_incorrect == GameInput::NullFrame)
          {
-             logger->LogAndPrint("prediction ok.  proceeding.", "sync.cpp", "info");
+             logger->LogAndPrint("prediction ok.  proceeding.", "sync.cpp", LogManager::LogLevel::Info);
              return true;
          }
 

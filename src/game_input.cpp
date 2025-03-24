@@ -86,15 +86,15 @@ namespace GGPO
      {
          if (not bitsonly and frame != other.frame)
          {
-             logger->LogAndPrint(format("frames don't match: {}, {}", frame, other.frame), "game_input.cpp", "info");
+             logger->LogAndPrint(format("frames don't match: {}, {}", frame, other.frame), "game_input.cpp", LogManager::LogLevel::Info);
          }
          if (size != other.size)
          {
-             logger->LogAndPrint(format("sizes don't match: {}, {}", size, other.size), "game_input.cpp", "info");
+             logger->LogAndPrint(format("sizes don't match: {}, {}", size, other.size), "game_input.cpp", LogManager::LogLevel::Info);
          }
          if (memcmp(bits, other.bits, size))
          {
-             logger->LogAndPrint("bits don't match", "game_input.cpp", "info");
+             logger->LogAndPrint("bits don't match", "game_input.cpp", LogManager::LogLevel::Info);
          }
 
          ASSERT(size and other.size);

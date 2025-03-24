@@ -22,13 +22,13 @@ namespace GGPO
          setsockopt(f_Socket, SOL_SOCKET, SO_DONTLINGER, (const char*)&optval, sizeof optval);
 
          // non-blocking...
-#if defined(_WIN32)
-         u_long iMode = 1;
-         ioctlsocket(f_Socket, FIONBIO, &iMode);
-#else
-         int flags = fcntl(s, F_GETFL, 0);
-         fcntl(s, F_SETFL, flags | O_NONBLOCK);
-#endif
+        #if defined(_WIN32)
+             u_long iMode = 1;
+             ioctlsocket(f_Socket, FIONBIO, &iMode);
+        #else
+             int flags = fcntl(s, F_GETFL, 0);
+             fcntl(s, F_SETFL, flags | O_NONBLOCK);
+        #endif
 
          sin.sin_family = AF_INET;
          sin.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -39,7 +39,7 @@ namespace GGPO
 
              if (bind(f_Socket, (sockaddr*)&sin, sizeof sin) != GGPO_SOCKET_ERROR)
              {
-                 logger->LogAndPrint(format("Udp bound to port: {}.\n", port), "udp.cpp", "info");
+                 logger->LogAndPrint(format("Udp bound to port: {}.", port), "udp.cpp", LogManager::LogLevel::Info);
                  return f_Socket;
              }
          }
@@ -72,7 +72,7 @@ namespace GGPO
          _poll = poll;
          _poll->RegisterLoop(this);
 
-         logger->LogAndPrint(format("binding udp socket to port {}.\n", port), "udp.cpp", "info");
+         logger->LogAndPrint(format("binding udp socket to port {}.", port), "udp.cpp", LogManager::LogLevel::Info);
          _socket = CreateSocket(port, 0);
      }
 
@@ -86,13 +86,13 @@ namespace GGPO
          if (res == GGPO_SOCKET_ERROR)
          {
              DWORD err = GGPO_GET_LAST_ERROR();
-             logger->LogAndPrint(format("unknown error in sendto (erro: {}  wsaerr: {}).\n", res, err), "udp.cpp", "error");
+             logger->LogAndPrint(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp", LogManager::LogLevel::Error);
              ASSERT(FALSE && "Unknown error in sendto");
          }
 
          char dst_ip[1024];
 
-         logger->LogAndPrint(format("sent packet length {} to {}:{} (ret:{}).\n", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", "error");
+         logger->LogAndPrint(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", LogManager::LogLevel::Error);
      }
 
      bool
@@ -115,7 +115,7 @@ namespace GGPO
 
                  if (error != GGPO_SOCKET_ERROR_CODE)
                  {
-                     logger->LogAndPrint(format("recvfrom GGPO_GET_LAST_ERROR returned {} ({}).\n", error, error), "udp.cpp", "error");
+                     logger->LogAndPrint(format("recvfrom GGPO_GET_LAST_ERROR returned {} ({}).", error, error), "udp.cpp", LogManager::LogLevel::Error);
                  }
 
                  break;
@@ -123,7 +123,7 @@ namespace GGPO
              else if (len > 0)
              {
                  char src_ip[1024];
-                 logger->LogAndPrint(format("recvfrom returned (len:{}  from:{}:{}).\n", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", "error");
+                 logger->LogAndPrint(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", LogManager::LogLevel::Error);
                  UdpMsg* msg = (UdpMsg*)recv_buf;
                  _callbacks->OnMsg(recv_addr, msg, len);
              }
