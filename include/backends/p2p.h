@@ -35,6 +35,15 @@ namespace GGPO
 		 virtual ErrorCode SetDisconnectTimeout(int timeout);
 		 virtual ErrorCode SetDisconnectNotifyStart(int timeout);
 
+		 virtual bool 
+			 InitializeLogger
+			 (
+				 const string& fp_DesiredOutputDirectory, 
+				 const string& fp_DesiredLoggerName,
+				 const string& fp_MinLogLevel = "trace",
+				 const string& fp_MaxLogLevel = "fatal"
+			 );
+
 	 public:
 		 virtual void OnMsg(sockaddr_in& from, UdpMsg* msg, int len);
 
@@ -60,7 +69,7 @@ namespace GGPO
 		 Sync                  _sync;
 		 Udp                   _udp;
 		 UdpProtocol* _endpoints;
-		 UdpProtocol           _spectators[MAX_SPECTATORS];
+		 array <UdpProtocol, MAX_SPECTATORS> _spectators = {};
 		 int                   _num_spectators;
 		 int                   _input_size;
 
@@ -72,6 +81,6 @@ namespace GGPO
 		 int                   _disconnect_timeout;
 		 int                   _disconnect_notify_start;
 
-		 UdpMsg::connect_status _local_connect_status[UDP_MSG_MAX_PLAYERS];
+		 array<UdpMsg::connect_status, UDP_MSG_MAX_PLAYERS> _local_connect_status = {};
 	 };
 }

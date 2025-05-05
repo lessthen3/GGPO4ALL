@@ -48,7 +48,7 @@ namespace GGPO
          _endpoints = new UdpProtocol[_num_players];
          memset(_local_connect_status, 0, sizeof(_local_connect_status));
 
-         for (int i = 0; i < ARRAY_SIZE(_local_connect_status); i++)
+         for (int i = 0; i < _local_connect_status.size(); i++)
          {
              _local_connect_status[i].last_frame = -1;
          }
@@ -63,6 +63,22 @@ namespace GGPO
      {
          delete[] _endpoints;
      }
+
+     bool 
+         Peer2PeerBackend::InitializeLogger
+         (
+             const string& fp_DesiredOutputDirectory,
+             const string& fp_DesiredLoggerName,
+             const string& fp_MinLogLevel = "trace",
+             const string& fp_MaxLogLevel = "fatal"
+         )
+     {
+         logger = make_unique<LogManager>();
+         logger->Initialize(fp_DesiredOutputDirectory, fp_DesiredLoggerName, fp_MinLogLevel, fp_MaxLogLevel);
+
+         logger->LogAndPrint("Successfully initialized logger!", "p2p.cpp", LogManager::LogLevel::Info);
+     }
+
 
      void
          Peer2PeerBackend::AddRemotePlayer

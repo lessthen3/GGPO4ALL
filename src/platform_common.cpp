@@ -13,10 +13,6 @@
 
 namespace GGPO
 {
-
-    LogManager* logger = &LogManager::GGPO_LOGGER(); //grabbing a global reference to the singleton logger for easier reading 
-    //i might just create a logger wherever this is used to allow for multi threaded environments
-
 #if defined(_WIN32) or defined(_WIN64)
 
     int

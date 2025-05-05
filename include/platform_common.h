@@ -20,10 +20,6 @@ namespace GGPO
 	 * Macros
 	 */
 
-#ifndef ARRAY_SIZE
-#  define ARRAY_SIZE(__arg)    (sizeof(__arg) / sizeof((__arg)[0]))
-#endif
-
 #ifndef MAX_INT
 #  define MAX_INT          0xEFFFFFF
 #endif
@@ -47,9 +43,7 @@ namespace GGPO
 	   //   }                                                     
 	   //} while (false)
 
-	   extern LogManager* logger;
-
-	   // Platform-Specific Includes
+// Platform-Specific Includes
 #if defined(_WIN32) || defined(_WIN64)
 
 #include <winsock2.h>

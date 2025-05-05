@@ -184,9 +184,9 @@ namespace GGPO {
             }
         }
     //////////////////////////////////////////////
-    // Private Constructor
+    // Public Constructor
     //////////////////////////////////////////////
-    private:
+    public:
         LogManager() = default;
         LogManager(const LogManager&) = delete;
         LogManager& operator=(const LogManager&) = delete;

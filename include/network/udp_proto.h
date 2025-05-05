@@ -17,211 +17,221 @@
 
 namespace GGPO
 {
+    class UdpProtocol : public IPollSink
+    {
+    public:
+        struct Stats
+        {
+            int                 ping;
+            int                 remote_frame_advantage;
+            int                 local_frame_advantage;
+            int                 send_queue_len;
+            Udp::Stats        udp;
+        };
 
-     class UdpProtocol : public IPollSink
-     {
-     public:
-         struct Stats
-         {
-             int                 ping;
-             int                 remote_frame_advantage;
-             int                 local_frame_advantage;
-             int                 send_queue_len;
-             Udp::Stats        udp;
-         };
+        struct Event 
+        {
+            enum Type 
+            {
+                Unknown = -1,
+                Connected,
+                Synchronizing,
+                Synchronzied,
+                Input,
+                Disconnected,
+                NetworkInterrupted,
+                NetworkResumed,
+            };
 
-         struct Event {
-             enum Type {
-                 Unknown = -1,
-                 Connected,
-                 Synchronizing,
-                 Synchronzied,
-                 Input,
-                 Disconnected,
-                 NetworkInterrupted,
-                 NetworkResumed,
-             };
+            Type      type;
+            union 
+            {
+                struct 
+                {
+                    GameInput   input;
+                } input;
+                struct 
+                {
+                    int         total;
+                    int         count;
+                } synchronizing;
+                struct 
+                {
+                    int         disconnect_timeout;
+                } network_interrupted;
+            } u;
 
-             Type      type;
-             union {
-                 struct {
-                     GameInput   input;
-                 } input;
-                 struct {
-                     int         total;
-                     int         count;
-                 } synchronizing;
-                 struct {
-                     int         disconnect_timeout;
-                 } network_interrupted;
-             } u;
+            UdpProtocol::Event(Type t = Unknown) : type(t) { }
+        };
 
-             UdpProtocol::Event(Type t = Unknown) : type(t) { }
-         };
+    public:
+        virtual bool OnLoopPoll(void* cookie);
 
-     public:
-         virtual bool OnLoopPoll(void* cookie);
+    public:
+        UdpProtocol();
+        virtual ~UdpProtocol();
 
-     public:
-         UdpProtocol();
-         virtual ~UdpProtocol();
+        void Init(Udp* udp, Poll& p, int queue, char* ip, uint16_t port, UdpMsg::connect_status* status);
 
-         void Init(Udp* udp, Poll& p, int queue, char* ip, uint16_t port, UdpMsg::connect_status* status);
+        void Synchronize();
+        bool GetPeerConnectStatus(int id, int* frame);
+        void SendInput(GameInput& input);
+        void SendInputAck();
+        bool HandlesMsg(sockaddr_in& from, UdpMsg* msg);
+        void OnMsg(UdpMsg* msg, int len);
+        void Disconnect();
 
-         void Synchronize();
-         bool GetPeerConnectStatus(int id, int* frame);
-         void SendInput(GameInput& input);
-         void SendInputAck();
-         bool HandlesMsg(sockaddr_in& from, UdpMsg* msg);
-         void OnMsg(UdpMsg* msg, int len);
-         void Disconnect();
+        void GetNetworkStats(struct NetworkStats* stats);
+        bool GetEvent(UdpProtocol::Event& e);
+        void NetworkStats(Stats* stats); //??????????????????????????????????????
+        void SetLocalFrameNumber(int num);
+        int RecommendFrameDelay();
 
-         void GetNetworkStats(struct NetworkStats* stats);
-         bool GetEvent(UdpProtocol::Event& e);
-         void NetworkStats(Stats* stats); //??????????????????????????????????????
-         void SetLocalFrameNumber(int num);
-         int RecommendFrameDelay();
+        void SetDisconnectTimeout(int timeout);
+        void SetDisconnectNotifyStart(int timeout);
 
-         void SetDisconnectTimeout(int timeout);
-         void SetDisconnectNotifyStart(int timeout);
+        bool IsInitialized()
+        {
+            return _udp != NULL;
+        }
 
-         bool IsInitialized()
-         {
-             return _udp != NULL;
-         }
+        bool
+            IsSynchronized()
+            const
+        {
+            return _current_state == Running;
+        }
 
-         bool
-             IsSynchronized()
-             const
-         {
-             return _current_state == Running;
-         }
+        bool
+            IsRunning()
+            const
+        {
+            return _current_state == Running;
+        }
 
-         bool
-             IsRunning()
-             const
-         {
-             return _current_state == Running;
-         }
+    protected:
+        enum State
+        {
+            Syncing,
+            Synchronzied,
+            Running,
+            Disconnected
+        };
 
-     protected:
-         enum State
-         {
-             Syncing,
-             Synchronzied,
-             Running,
-             Disconnected
-         };
+        struct QueueEntry
+        {
+            int         queue_time;
+            sockaddr_in dest_addr;
+            UdpMsg* msg;
 
-         struct QueueEntry
-         {
-             int         queue_time;
-             sockaddr_in dest_addr;
-             UdpMsg* msg;
+            QueueEntry() {}
+            QueueEntry(int time, sockaddr_in& dst, UdpMsg* m) : queue_time(time), dest_addr(dst), msg(m) { }
+        };
 
-             QueueEntry() {}
-             QueueEntry(int time, sockaddr_in& dst, UdpMsg* m) : queue_time(time), dest_addr(dst), msg(m) { }
-         };
+        bool CreateSocket(int retries);
+        void UpdateNetworkStats(void);
+        void QueueEvent(const UdpProtocol::Event& evt);
+        void ClearSendQueue(void);
+        void LogMsg(const char* prefix, UdpMsg* msg);
+        void LogEvent(const char* prefix, const UdpProtocol::Event& evt);
+        void SendSyncRequest();
+        void SendMsg(UdpMsg* msg);
+        void PumpSendQueue();
+        void DispatchMsg(uint8_t* buffer, int len); //?????????????????????????????????
+        void SendPendingOutput();
+        bool OnInvalid(UdpMsg* msg, int len);
+        bool OnSyncRequest(UdpMsg* msg, int len);
+        bool OnSyncReply(UdpMsg* msg, int len);
+        bool OnInput(UdpMsg* msg, int len);
+        bool OnInputAck(UdpMsg* msg, int len);
+        bool OnQualityReport(UdpMsg* msg, int len);
+        bool OnQualityReply(UdpMsg* msg, int len);
+        bool OnKeepAlive(UdpMsg* msg, int len);
 
-         bool CreateSocket(int retries);
-         void UpdateNetworkStats(void);
-         void QueueEvent(const UdpProtocol::Event& evt);
-         void ClearSendQueue(void);
-         void LogMsg(const char* prefix, UdpMsg* msg);
-         void LogEvent(const char* prefix, const UdpProtocol::Event& evt);
-         void SendSyncRequest();
-         void SendMsg(UdpMsg* msg);
-         void PumpSendQueue();
-         void DispatchMsg(uint8_t* buffer, int len); //?????????????????????????????????
-         void SendPendingOutput();
-         bool OnInvalid(UdpMsg* msg, int len);
-         bool OnSyncRequest(UdpMsg* msg, int len);
-         bool OnSyncReply(UdpMsg* msg, int len);
-         bool OnInput(UdpMsg* msg, int len);
-         bool OnInputAck(UdpMsg* msg, int len);
-         bool OnQualityReport(UdpMsg* msg, int len);
-         bool OnQualityReply(UdpMsg* msg, int len);
-         bool OnKeepAlive(UdpMsg* msg, int len);
+    protected:
+        /*
+        * Network transmission information
+        */
+        Udp* _udp;
+        sockaddr_in    _peer_addr;
+        uint16_t         _magic_number;
+        int            _queue;
+        uint16_t         _remote_magic_number;
+        bool           _connected;
+        int            _send_latency;
+        int            _oop_percent;
+        struct 
+        {
+            int         send_time;
+            sockaddr_in dest_addr;
+            UdpMsg* msg;
+        } _oo_packet;
+        RingBuffer<QueueEntry, 64> _send_queue;
 
-     protected:
-         /*
-          * Network transmission information
-          */
-         Udp* _udp;
-         sockaddr_in    _peer_addr;
-         uint16_t         _magic_number;
-         int            _queue;
-         uint16_t         _remote_magic_number;
-         bool           _connected;
-         int            _send_latency;
-         int            _oop_percent;
-         struct {
-             int         send_time;
-             sockaddr_in dest_addr;
-             UdpMsg* msg;
-         }              _oo_packet;
-         RingBuffer<QueueEntry, 64> _send_queue;
+        /*
+        * Stats
+        */
+        int            _round_trip_time;
+        int            _packets_sent;
+        int            _bytes_sent;
+        int            _kbps_sent;
+        int            _stats_start_time;
 
-         /*
-          * Stats
-          */
-         int            _round_trip_time;
-         int            _packets_sent;
-         int            _bytes_sent;
-         int            _kbps_sent;
-         int            _stats_start_time;
+        /*
+        * The state machine
+        */
+        UdpMsg::connect_status* _local_connect_status;
+        UdpMsg::connect_status _peer_connect_status[UDP_MSG_MAX_PLAYERS];
 
-         /*
-          * The state machine
-          */
-         UdpMsg::connect_status* _local_connect_status;
-         UdpMsg::connect_status _peer_connect_status[UDP_MSG_MAX_PLAYERS];
+        State          _current_state;
 
-         State          _current_state;
-         union {
-             struct {
-                 uint32_t   roundtrips_remaining;
-                 uint32_t   random;
-             } sync;
-             struct {
-                 uint32_t   last_quality_report_time;
-                 uint32_t   last_network_stats_interval;
-                 uint32_t   last_input_packet_recv_time;
-             } running;
-         } _state;
+        union 
+        {
+            struct 
+            {
+                uint32_t   roundtrips_remaining;
+                uint32_t   random;
+            } sync;
+            struct 
+            {
+                uint32_t   last_quality_report_time;
+                uint32_t   last_network_stats_interval;
+                uint32_t   last_input_packet_recv_time;
+            } running;
+        } _state;
 
-         /*
-          * Fairness.
-          */
-         int               _local_frame_advantage;
-         int               _remote_frame_advantage;
+        /*
+        * Fairness.
+        */
+        int               _local_frame_advantage;
+        int               _remote_frame_advantage;
 
-         /*
-          * Packet loss...
-          */
-         RingBuffer<GameInput, 64>  _pending_output;
-         GameInput                  _last_received_input;
-         GameInput                  _last_sent_input;
-         GameInput                  _last_acked_input;
-         unsigned int               _last_send_time;
-         unsigned int               _last_recv_time;
-         unsigned int               _shutdown_timeout;
-         unsigned int               _disconnect_event_sent;
-         unsigned int               _disconnect_timeout;
-         unsigned int               _disconnect_notify_start;
-         bool                       _disconnect_notify_sent;
+        /*
+        * Packet loss...
+        */
+        RingBuffer<GameInput, 64>  _pending_output;
+        GameInput                  _last_received_input;
+        GameInput                  _last_sent_input;
+        GameInput                  _last_acked_input;
+        unsigned int               _last_send_time;
+        unsigned int               _last_recv_time;
+        unsigned int               _shutdown_timeout;
+        unsigned int               _disconnect_event_sent;
+        unsigned int               _disconnect_timeout;
+        unsigned int               _disconnect_notify_start;
+        bool                       _disconnect_notify_sent;
 
-         uint16_t                     _next_send_seq;
-         uint16_t                     _next_recv_seq;
+        uint16_t                     _next_send_seq;
+        uint16_t                     _next_recv_seq;
 
-         /*
-          * Rift synchronization.
-          */
-         TimeSync                   _timesync;
+        /*
+        * Rift synchronization.
+        */
+        TimeSync                   _timesync;
 
-         /*
-          * Event queue
-          */
-         RingBuffer<UdpProtocol::Event, 64>  _event_queue;
-     };
+        /*
+        * Event queue
+        */
+        RingBuffer<UdpProtocol::Event, 64>  _event_queue;
+    };
 }

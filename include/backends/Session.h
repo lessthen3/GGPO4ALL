@@ -15,10 +15,19 @@ namespace GGPO
 	 struct Session
 	 {
 		 virtual ~Session() { }
-		 virtual ErrorCode DoPoll(int timeout) { return ErrorCode::OK; }
 		 virtual ErrorCode AddPlayer(Player* player, PlayerHandle* handle) = 0;
 		 virtual ErrorCode AddLocalInput(PlayerHandle player, void* values, int size) = 0;
 		 virtual ErrorCode SyncInput(void* values, int size, int* disconnect_flags) = 0;
+		 virtual bool 
+			 InitializeLogger
+			(
+				const string& fp_DesiredOutputDirectory, 
+				const string& fp_DesiredLoggerName,
+				const string& fp_MinLogLevel = "trace",
+				const string& fp_MaxLogLevel = "fatal"
+			) = 0;
+
+		 virtual ErrorCode DoPoll(int timeout) { return ErrorCode::OK; }
 		 virtual ErrorCode IncrementFrame(void) { return ErrorCode::OK; }
 		 virtual ErrorCode Chat(char* text) { return ErrorCode::OK; }
 		 virtual ErrorCode DisconnectPlayer(PlayerHandle handle) { return ErrorCode::OK; }
@@ -27,6 +36,10 @@ namespace GGPO
 		 virtual ErrorCode SetFrameDelay(PlayerHandle player, int delay) { return ErrorCode::UNSUPPORTED; }
 		 virtual ErrorCode SetDisconnectTimeout(int timeout) { return ErrorCode::UNSUPPORTED; }
 		 virtual ErrorCode SetDisconnectNotifyStart(int timeout) { return ErrorCode::UNSUPPORTED; }
+
+
+	 protected:
+		 unique_ptr<LogManager> logger = nullptr;
 	 };
 }
 
