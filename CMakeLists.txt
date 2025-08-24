@@ -87,8 +87,7 @@ file(
 	GLOB_RECURSE 
 	GGPO4ALL_SOURCES 
 	CONFIGURE_DEPENDS
-	"src/*.cpp" 
-	"include/*.h"
+	"${CMAKE_SOURCE_DIR}/GGPO4ALL.hpp"
 )
 
 ####################################### Library Target
@@ -96,30 +95,20 @@ file(
 # STATIC LIBRARY
 
 add_library(
-	${PROJECT_NAME} STATIC 
+	${PROJECT_NAME} INTERFACE 
 	${GGPO4ALL_SOURCES}
 )
 
-target_include_directories(
-	${PROJECT_NAME} PUBLIC 
-	"include"
+add_executable(
+	simple_test 
+	tests/main.cpp
 )
 
-# SHARED LIBRARY idk this isnt working and i dont feel like getting it to work xd
+target_include_directories(simple_test PUBLIC
+	${GGPO4ALL_SOURCES}
+)
 
-# add_library(
-# 	${PROJECT_NAME}_shared SHARED 
-# 	${GGPO4ALL_SOURCES}
-# )
-
-# target_include_directories(
-# 	${PROJECT_NAME}_shared PUBLIC 
-# 	"include"
-# )
-
-# if(WIN32)
-#     target_compile_definitions(${PROJECT_NAME}_shared PRIVATE GGPO4ALL_DLL_EXPORT)
-# endif()
+set(Test simple_test)
 
 ####################################### Build Message
 
@@ -139,7 +128,7 @@ if(CMAKE_GENERATOR STREQUAL "Xcode")
 # Set GGPO4ALL as the startup project for Visual Studio
 
 elseif(CMAKE_GENERATOR MATCHES "Visual Studio")
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
-    message(STATUS "Setting ${PROJECT_NAME} as the default startup project for VS2022")
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${Test})
+    message(STATUS "Setting ${Test} as the default startup project for VS2022")
 
 endif()

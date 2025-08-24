@@ -2,6 +2,12 @@ import subprocess
 import os
 import argparse
 import platform
+import shutil
+import sys
+
+from shutil import which
+
+############# Pretty Text Utility Function UwU #############
 
 def CreateColouredText(fp_SampleText: str, fp_DesiredColour: str) -> str:
 
@@ -24,24 +30,59 @@ def CreateColouredText(fp_SampleText: str, fp_DesiredColour: str) -> str:
     else:
         return f"{f_ListOfColours.get(fp_DesiredColour, '')}{fp_SampleText}\033[0m"
 
-def detect_platform() -> str:
-    system = platform.system()
-    if system == "Windows":
-        return "win"
-    elif system == "Darwin":
-        return "osx"
-    elif system == "Linux":
-        return "linux"
+############# Utility for Validating Required Build Tools #############
+
+def ensure_tool_installed(fp_ToolName: str) -> bool:
+
+    if which(fp_ToolName) is None:
+        print(CreateColouredText(f"[ERROR]: Required tool '{fp_ToolName}' not found in PATH", "red"))
+        return False
+    
     else:
-        raise RuntimeError("Unsupported platform!")
+        return True
+
+############# Run command for live console feed #############
+
+"""
+    Runs a subprocess command and streams stdout live.
+    Raises CalledProcessError if the command fails,
+    attaching the full output to the exception.
+"""
+
+def run_command_with_live_output(fp_Command, fp_WorkingDirectory=".") -> None:
+
+    f_Process = subprocess.Popen(
+        fp_Command,
+        cwd=fp_WorkingDirectory,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        encoding="utf-8", 
+        errors="replace"  
+    )
+
+    f_OutputLines = []
+
+    try:
+        for line in f_Process.stdout:
+            sys.stdout.write(line)
+            f_OutputLines.append(line)
+
+        f_Process.wait()
+
+        if f_Process.returncode != 0:
+            raise subprocess.CalledProcessError(
+                f_Process.returncode,
+                fp_Command,
+                output=''.join(f_OutputLines)
+            )
+
+    finally:
+        f_Process.stdout.close()
+
+############# Main CMake Function #############
 
 def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
-
-    f_PlatformName = detect_platform()
-    f_TargetBuildDirectory = f"build/{f_PlatformName}"
-
-    # Ensure the base build directory exists
-    os.makedirs(f_TargetBuildDirectory, exist_ok=True)
 
     f_GeneratorMap = {
         "vs2022": "Visual Studio 17 2022",
@@ -64,115 +105,122 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
         "nmake-jom": "NMake Makefiles JOM"
     }
 
+    ############# Ensure Valid Generator was Selected #############
+
     if fp_Generator not in f_GeneratorMap:
         print(CreateColouredText("[ERROR]: Invalid Generator Selected, PLEASE PICK A VALID GENERATOR", "red"))
         return False
     
-    #Determine if we need `--config`
+    ############# Determine if Generator is Single Config #############
+    
     f_IsMultiConfig = fp_Generator in ["vs2022", "vs2019", "vs2017", "vs2015", "xcode", "ninja-mc"]
 
-    f_CMakeConfigCommand = ['cmake', '-S', '.', '-B', 'build', '-G', f_GeneratorMap[fp_Generator]]
+    f_CMakeConfigCommand = ['cmake', '-S', '.', '-B', 'build', '-G', f_GeneratorMap[fp_Generator], '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']
 
     if not f_IsMultiConfig:
-        if fp_BuildType == "both":
+
+        if fp_BuildType == "Release and Debug": #Don't allow "both" configs for single config generators uwu
+            
             print(CreateColouredText("[ERROR]: Invalid build type selected: YOU CANNOT USE BOTH WHEN GENERATING FOR A SINGLE CONFIG GENERATOR", "red"))
             return False
+        
         else:
             f_CMakeConfigCommand += ['-DCMAKE_BUILD_TYPE=' + fp_BuildType.capitalize()]
 
-    #Step 1: CMake Project Generation
+    ############# Generate CMake Project #############
+
     try:
         print(CreateColouredText(f"[INFO]: Running CMake project generation for {f_GeneratorMap[fp_Generator]}...", "green"))
 
-        subprocess.run(
-            f_CMakeConfigCommand,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        run_command_with_live_output(f_CMakeConfigCommand)
 
     except subprocess.CalledProcessError as err:
         print(CreateColouredText("[ERROR]: CMake project generation failed!", "red"))
-        print(CreateColouredText(err.stdout.decode(), "yellow"))
-        print(CreateColouredText(err.stderr.decode(), "yellow"))
+        print(CreateColouredText(err.output, "yellow"))
         return False
 
     print(CreateColouredText("[SUCCESS]: CMake project generation completed!", "cyan"))
 
-    #Step 2: Run CMake Build Process
+    ############# Run CMake Build Process for Single Config #############
+
     if not f_IsMultiConfig:
         try:
             print(CreateColouredText(f"[INFO]: Running CMake single config build for {fp_BuildType}...", "green"))
 
-            subprocess.run(
-                ['cmake', '--build', 'build'],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            run_command_with_live_output(['cmake', '--build', 'build'])
 
         except subprocess.CalledProcessError as err:
             print(CreateColouredText(f"[ERROR]: CMake single config {fp_BuildType} build process failed!", "red"))
-            print(CreateColouredText(err.stdout.decode(), "yellow"))
-            print(CreateColouredText(err.stderr.decode(), "yellow"))
+            print(CreateColouredText(err.output, "yellow"))
+
             return False
 
-        print(CreateColouredText(f"[SUCCESS]: {fp_BuildType} build completed!", "cyan"))
+        print(CreateColouredText(f"\n[SUCCESS]: {fp_BuildType} build completed!", "cyan"))
 
         return True #return immediately since we don't need to go through the --config commands for single config generators
 
-    if( fp_BuildType == "debug" or fp_BuildType == "both" ):
+    ############# Run Debug Build #############
+
+    if( fp_BuildType == "Debug" or fp_BuildType == "Release and Debug" ):
         try:
             print(CreateColouredText("[INFO]: Running CMake build for Debug...", "green"))
 
-            subprocess.run(
-                ['cmake', '--build', 'build', '--config', 'Debug'],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            run_command_with_live_output(['cmake', '--build', 'build', '--config', 'Debug'])
 
         except subprocess.CalledProcessError as err:
             print(CreateColouredText("[ERROR]: CMake debug build process failed!", "red"))
-            print(CreateColouredText(err.stdout.decode(), "yellow"))
-            print(CreateColouredText(err.stderr.decode(), "yellow"))
+            print(CreateColouredText(err.output, "yellow"))
+
             return False
 
         print(CreateColouredText("[SUCCESS]: Debug build completed!", "cyan"))
 
-    if( fp_BuildType == "release" or fp_BuildType == "both" ):
+    ############# Run Release Build #############
+
+    if( fp_BuildType == "Release" or fp_BuildType == "Release and Debug" ):
         try:
             print(CreateColouredText("[INFO]: Running CMake build for Release...", "green"))
 
-            subprocess.run(
-                ['cmake', '--build', 'build', '--config', 'Release'],
-                check=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
+            run_command_with_live_output(['cmake', '--build', 'build', '--config', 'Release'])
 
         except subprocess.CalledProcessError as err:
             print(CreateColouredText("[ERROR]: CMake release build process failed!", "red"))
-            print(CreateColouredText(err.stdout.decode(), "yellow"))
-            print(CreateColouredText(err.stderr.decode(), "yellow"))
+            print(CreateColouredText(err.output, "yellow"))
+
             return False
 
         print(CreateColouredText("[SUCCESS]: Release build completed!", "cyan"))
 
-    print(CreateColouredText("[INFO]: Your CMake project should be good to go!", "green"))
+    ############# Success! #############
+
+    print(CreateColouredText("\n[INFO]: Your CMake project should be good to go!", "green"))
 
     return True
 
+############# Main Function #############
+
 def main() -> bool:
 
-    usage_message = CreateColouredText("init.py ", 'bright magenta') + CreateColouredText("--[build_type: release, debug or both] ", "bright blue") + CreateColouredText("-G [desired_generator]", "blue")
+    ############# Check for Required Build Tools in PATH #############
+    
+    if not ensure_tool_installed("cmake"): 
+        return False
+
+    ############# Setup Parser #############
+
+    usage_message = \
+        CreateColouredText("init.py ", 'bright magenta') + \
+        CreateColouredText("--[build_type: release, debug or both] ", "bright blue") + \
+        CreateColouredText("-G [desired_generator] ", "blue")
 
     parser = argparse.ArgumentParser(
-        description=CreateColouredText('Used for Building GGPO4ALL from Source', 'bright green'), 
+        description=CreateColouredText('Used for Building Peach-E from Source', 'bright green'), 
         usage=usage_message, 
         add_help=True,
         formatter_class=argparse.RawTextHelpFormatter
     )
+
+    ############# Set Parser Arguments #############
 
     parser.add_argument(
         '--release', 
@@ -193,7 +241,13 @@ def main() -> bool:
     )
 
     parser.add_argument(
-        ('-G'), 
+        '--clean', 
+        action='store_true', 
+        help=CreateColouredText('Used to clean build artifacts from a previous run', 'bright magenta')
+    )
+
+    parser.add_argument(
+        '-G', 
         nargs=1,
         metavar="[generator]",
         help=CreateColouredText('Used to set the project file generator, options are as follows:', 'bright magenta') + "\n" + \
@@ -215,10 +269,25 @@ def main() -> bool:
     )   
     
     args = parser.parse_args()
+    
+    ############# Validate Build Config #############
 
-    if(not args.debug and not args.release and not args.both):
+    f_BuildType = "nothing"
+
+    if(args.debug):
+        f_BuildType = "Debug"
+
+    elif(args.release):
+        f_BuildType = "Release"
+
+    elif(args.both):
+        f_BuildType = "Release and Debug"
+
+    else:
         print(CreateColouredText("[ERROR]: No valid build type input detected, use -h or --help if you're unfamiliar", "red"))
         return False
+    
+    ############# Check for Generator #############
         
     if(not args.G):
         print(CreateColouredText("[ERROR]: YOU DIDN'T USE -G FLAG BROTHER", "red"))
@@ -226,31 +295,40 @@ def main() -> bool:
 
     f_DesiredGenerator = args.G[0].lower() #convert to all lower case for easier handling
 
-    if(args.debug):
+    ############# Check for --clean flag #############
 
-        if not run_cmake("debug", f_DesiredGenerator):
+    if args.clean:
+        shutil.rmtree('build', ignore_errors=True)
+
+    ############# Detect Platform #############
+
+    f_CurrentPlatform = platform.system()
+
+    ############# Run Build Fingers Crossed >w< #############
+
+    if not run_cmake(f_BuildType, f_DesiredGenerator):
             return False
-        
-    elif(args.release):
+    
+    ############# Report Build Stats #############
 
-        if not run_cmake("release", f_DesiredGenerator):
-            return False
+    print(CreateColouredText(f"[INFO]: Final Build Summary: \n", "bright green"))
+    print(CreateColouredText(f"Generator: {f_DesiredGenerator}", "bright magenta"))
+    print(CreateColouredText(f"Build Type: {f_BuildType}", "bright magenta"))
+    print(CreateColouredText(f"Platform: {f_CurrentPlatform}\n", "bright magenta"))
 
-    elif(args.both):
-
-        if not run_cmake("both", f_DesiredGenerator):
-            return False
-
-    print(CreateColouredText("done!", "magenta"))
     return True
 
+############# Main Caller #############
 
 if __name__ == "__main__":
 
-    if platform.system() == "Windows":
-        os.system('color') #enable ANSI colour codes
+    if platform.system() == "Windows": #enable ANSI colour codes for Windows Console
+        os.system('color') 
 
     if not main():
-        print(CreateColouredText("[ERROR]: execution of full build process was unsuccessful", "red"))
+        print(CreateColouredText("[ERROR]: execution of full build process was unsuccessful\n", "red"))
+    else:
+        print(CreateColouredText("done!\n", "magenta"))
+
 
 #Rawr OwO
