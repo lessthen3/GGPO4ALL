@@ -32,42 +32,74 @@
 
 #include <thread>
 
-using namespace std; // >O<
+//DO NOT DO "using namespace GGPO", it's bad practice and will bring in the using namespace std bit so if you do that you deserve to be miserable
 
-#ifdef _DEBUG
-    #define GGPO_DEBUG
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace GGPO //I like using namespace std, but ik other ppl don't so this will limit its spread just don't do using namespace GGPO
+{
+    using namespace std; // >O<
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/*
+if you want to run GGPO4ALL in debug mode simple define or release with a console define this
+
+#define GGPO_USING_CONSOLE 
+
+before including GGPO4ALL anywhere in your code
+*/
+
+/*
+This is for logging settings, adjust as you wish but buyer beware, doing any changes here could break everything so your choice
+*/
+
+#ifdef GGPO_USING_CONSOLE
+    #define GGPO_LOG LogAndPrint
+#else
+    #define GGPO_LOG Log
 #endif
+
+constexpr uint32_t MAX_NUMBER_OF_LOGS = 1024;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Utility Functions/Structs
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if defined(_WIN32) || defined(_WIN64) //this needs to be called at least once at the start of the program to enable ANSI colour codes on windows consoles
+namespace GGPO //used for pretty logging for windows consoles, requires GGPO_USING_CONSOLE to be defined since release builds should not be opening console
+{
+    #if (defined(_WIN32) || defined(_WIN64)) && defined(GGPO_USING_CONSOLE) //this needs to be called at least once at the start of the program to enable ANSI colour codes on windows consoles
 
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
+    #define NOMINMAX
+    #define WIN32_LEAN_AND_MEAN
 
-#include <windows.h>
+    #include <windows.h>
 
-static bool
-    EnableColors()
-    {
-        DWORD f_ConsoleMode;
-        HANDLE f_OutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-
-        if (GetConsoleMode(f_OutputHandle, &f_ConsoleMode))
+    static bool
+        EnableColors()
         {
-            SetConsoleMode(f_OutputHandle, f_ConsoleMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-            return true;
-        }
-        else
-        {
-            cout << ("Was not able to set console mode to allow windows to display ANSI escape codes") << "\n";
-            return false;
-        }
-    }
+            DWORD f_ConsoleMode;
+            HANDLE f_OutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
 
-#endif
+            if (GetConsoleMode(f_OutputHandle, &f_ConsoleMode))
+            {
+                SetConsoleMode(f_OutputHandle, f_ConsoleMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+                return true;
+            }
+            else
+            {
+                cout << ("Was not able to set console mode to allow windows to display ANSI escape codes") << "\n";
+                return false;
+            }
+        }
+
+    #endif
+}//namespace GGPO
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace GGPO {
 
@@ -260,14 +292,6 @@ namespace GGPO {
     };
 } // namespace GGPO
 
-#ifdef GGPO_DEBUG
-    #define GGPO_LOG LogAndPrint
-#else
-    #define GGPO_LOG Log
-#endif
-
-constexpr uint32_t MAX_NUMBER_OF_LOGS = 1024;
-
 namespace GGPO {
 
     enum class Colours : int
@@ -457,7 +481,7 @@ namespace GGPO {
         void
             GetLastError()
         {
-            for (int __index = 0; __index < pm_LogSnapshotBuffer->CurrentSize(); __index++)
+            for (int lv_Index = 0; lv_Index < pm_LogSnapshotBuffer->CurrentSize(); lv_Index++)
             {
                 //XXX:TODO find last error here uwu >w<
             }
@@ -990,19 +1014,19 @@ namespace GGPO
 
 namespace GGPO{
 
-#ifndef MAX_INT
-#  define MAX_INT          0xEFFFFFF
+#ifndef GGPO_MAX_INT
+#  define GGPO_MAX_INT          0xEFFFFFF
 #endif
 
-#ifndef MAX
-#  define MAX(x, y)        (((x) > (y)) ? (x) : (y))
+#ifndef GGPO_MAX
+#  define GGPO_MAX(x, y)        (((x) > (y)) ? (x) : (y))
 #endif
 
-#ifndef MIN
-#  define MIN(x, y)        (((x) < (y)) ? (x) : (y))
+#ifndef GGPO_MIN
+#  define GGPO_MIN(x, y)        (((x) < (y)) ? (x) : (y))
 #endif
 
-#define ASSERT(x)                                           
+#define GGPO_ASSERT(x)                                           
      //do {                                                     
      //   if (!(x)) {                                           
      //      //char assert_buf[1024];                             
@@ -1013,7 +1037,7 @@ namespace GGPO{
        //   }                                                     
        //} while (false)
 
-#define ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
+#define GGPO_ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
 
 // Platform-Specific Includes
 #if defined(_WIN32) || defined(_WIN64)
@@ -1100,7 +1124,7 @@ namespace GGPO
     {
         char buf[1024];
 
-        if (GetEnvironmentVariable(name, buf, ARRAY_SIZE(buf)) == 0)
+        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
         {
             return 0;
         }
@@ -1113,7 +1137,7 @@ namespace GGPO
     {
         char buf[1024];
 
-        if (GetEnvironmentVariable(name, buf, ARRAY_SIZE(buf)) == 0)
+        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
         {
             return false;
         }
@@ -1139,7 +1163,7 @@ namespace GGPO
         clock_gettime(CLOCK_MONOTONIC, &current);
 
         return ((current.tv_sec - start.tv_sec) * 1000) +
-            ((current.tv_nsec - start.tv_nsec) / 1000000) +
+            ((current.tv_nsec - start.tv_nsec) / 1000000); //WEIRD: THIS HAD A TRAILING + AND IDK Y WTF remember dayt
     }
 
 #endif //Unix OS Check //Windows OS Check
@@ -1188,8 +1212,8 @@ namespace GGPO
                 int offset
             )
         {
-            ASSERT(isize);
-            ASSERT(isize <= GAMEINPUT_MAX_BYTES);
+            GGPO_ASSERT(isize);
+            GGPO_ASSERT(isize <= GAMEINPUT_MAX_BYTES);
             frame = iframe;
             size = isize;
             memset(bits, 0, sizeof(bits));
@@ -1208,8 +1232,8 @@ namespace GGPO
                 int isize
             )
         {
-            ASSERT(isize);
-            ASSERT(isize <= GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS);
+            GGPO_ASSERT(isize);
+            GGPO_ASSERT(isize <= GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS);
 
             frame = iframe;
             size = isize;
@@ -1248,7 +1272,7 @@ namespace GGPO
             ) 
             const
         {
-            ASSERT(size);
+            GGPO_ASSERT(size);
             size_t remaining = buf_size;
 
             if (show_frame)
@@ -1266,8 +1290,8 @@ namespace GGPO
 
                 if (value(i))
                 {
-                    int c = sprintf_s(buf2, ARRAY_SIZE(buf2), "%2d ", i);
-                    strncat_s(buf, remaining, buf2, ARRAY_SIZE(buf2));
+                    int c = sprintf_s(buf2, GGPO_ARRAY_SIZE(buf2), "%2d ", i);
+                    strncat_s(buf, remaining, buf2, GGPO_ARRAY_SIZE(buf2));
                     remaining -= c;
                 }
             }
@@ -1295,7 +1319,7 @@ namespace GGPO
                 logger->GGPO_LOG("bits don't match", "game_input.cpp", Logger::LogLevel::Info);
             }
 
-            ASSERT(size and other.size);
+            GGPO_ASSERT(size and other.size);
 
             return
                 (bitsonly or frame == other.frame) and
@@ -1354,7 +1378,7 @@ namespace GGPO
              */
             memset(_inputs, 0, sizeof _inputs);
 
-            for (int i = 0; i < ARRAY_SIZE(_inputs); i++)
+            for (int i = 0; i < GGPO_ARRAY_SIZE(_inputs); i++)
             {
                 _inputs[i].size = input_size;
             }
@@ -1390,7 +1414,7 @@ namespace GGPO
         void
             ResetPrediction(int frame)
         {
-            ASSERT(_first_incorrect_frame == GameInput::NullFrame || frame <= _first_incorrect_frame);
+            GGPO_ASSERT(_first_incorrect_frame == GameInput::NullFrame || frame <= _first_incorrect_frame);
 
             logger->LogAndPrint(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
 
@@ -1406,11 +1430,11 @@ namespace GGPO
         void
             DiscardConfirmedFrames(int frame)
         {
-            ASSERT(frame >= 0);
+            GGPO_ASSERT(frame >= 0);
 
             if (_last_frame_requested != GameInput::NullFrame)
             {
-                frame = MIN(frame, _last_frame_requested);
+                frame = GGPO_MIN(frame, _last_frame_requested);
             }
 
             logger->LogAndPrint(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp", Logger::LogLevel::Info);
@@ -1424,14 +1448,14 @@ namespace GGPO
                 int offset = frame - _inputs[_tail].frame + 1;
 
                 logger->LogAndPrint(format("difference of {} frames.", offset), "input_queue.cpp", Logger::LogLevel::Info);
-                ASSERT(offset >= 0);
+                GGPO_ASSERT(offset >= 0);
 
                 _tail = (_tail + offset) % INPUT_QUEUE_LENGTH;
                 _length -= offset;
             }
 
             logger->LogAndPrint(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp", Logger::LogLevel::Info);
-            ASSERT(_length >= 0);
+            GGPO_ASSERT(_length >= 0);
         }
 
         bool
@@ -1442,7 +1466,7 @@ namespace GGPO
             )
             const
         {
-            ASSERT(_first_incorrect_frame == GameInput::NullFrame || requested_frame < _first_incorrect_frame);
+            GGPO_ASSERT(_first_incorrect_frame == GameInput::NullFrame || requested_frame < _first_incorrect_frame);
             int offset = requested_frame % INPUT_QUEUE_LENGTH;
 
             if (_inputs[offset].frame != requested_frame)
@@ -1467,9 +1491,9 @@ namespace GGPO
             /*
             * No one should ever try to grab any input when we have a prediction
             * error.  Doing so means that we're just going further down the wrong
-            * path.  ASSERT this to verify that it's true.
+            * path.  GGPO_ASSERT this to verify that it's true.
             */
-            ASSERT(_first_incorrect_frame == GameInput::NullFrame);
+            GGPO_ASSERT(_first_incorrect_frame == GameInput::NullFrame);
 
             /*
             * Remember the last requested frame number for later.  We'll need
@@ -1477,7 +1501,7 @@ namespace GGPO
             */
             _last_frame_requested = requested_frame;
 
-            ASSERT(requested_frame >= _inputs[_tail].frame);
+            GGPO_ASSERT(requested_frame >= _inputs[_tail].frame);
 
             if (_prediction.frame == GameInput::NullFrame)
             {
@@ -1490,7 +1514,7 @@ namespace GGPO
                 if (offset < _length)
                 {
                     offset = (offset + _tail) % INPUT_QUEUE_LENGTH;
-                    ASSERT(_inputs[offset].frame == requested_frame);
+                    GGPO_ASSERT(_inputs[offset].frame == requested_frame);
                     *input = _inputs[offset];
                     logger->LogAndPrint(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp", Logger::LogLevel::Info);
                     return true;
@@ -1519,7 +1543,7 @@ namespace GGPO
                 _prediction.frame++;
             }
 
-            ASSERT(_prediction.frame >= 0);
+            GGPO_ASSERT(_prediction.frame >= 0);
 
             /*
             * If we've made it this far, we must be predicting.  Go ahead and
@@ -1544,7 +1568,7 @@ namespace GGPO
             * These next two lines simply verify that inputs are passed in
             * sequentially by the user, regardless of frame delay.
             */
-            ASSERT(_last_user_added_frame == GameInput::NullFrame || input.frame == _last_user_added_frame + 1);
+            GGPO_ASSERT(_last_user_added_frame == GameInput::NullFrame || input.frame == _last_user_added_frame + 1);
 
             _last_user_added_frame = input.frame;
 
@@ -1603,7 +1627,7 @@ namespace GGPO
                 expected_frame++;
             }
 
-            ASSERT(frame == 0 || frame == _inputs[PREVIOUS_FRAME(_head)].frame + 1);
+            GGPO_ASSERT(frame == 0 || frame == _inputs[PREVIOUS_FRAME(_head)].frame + 1);
             return frame;
         }
 
@@ -1612,11 +1636,11 @@ namespace GGPO
         {
             logger->LogAndPrint(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
 
-            ASSERT(input.size == _prediction.size);
+            GGPO_ASSERT(input.size == _prediction.size);
 
-            ASSERT(_last_added_frame == GameInput::NullFrame || frame_number == _last_added_frame + 1);
+            GGPO_ASSERT(_last_added_frame == GameInput::NullFrame || frame_number == _last_added_frame + 1);
 
-            ASSERT(frame_number == 0 || _inputs[PREVIOUS_FRAME(_head)].frame == frame_number - 1);
+            GGPO_ASSERT(frame_number == 0 || _inputs[PREVIOUS_FRAME(_head)].frame == frame_number - 1);
 
             /*
             * Add the frame to the back of the queue
@@ -1631,7 +1655,7 @@ namespace GGPO
 
             if (_prediction.frame != GameInput::NullFrame)
             {
-                ASSERT(frame_number == _prediction.frame);
+                GGPO_ASSERT(frame_number == _prediction.frame);
 
                 /*
                 * We've been predicting...  See if the inputs we've gotten match
@@ -1661,7 +1685,7 @@ namespace GGPO
                     _prediction.frame++;
                 }
             }
-            ASSERT(_length <= INPUT_QUEUE_LENGTH);
+            GGPO_ASSERT(_length <= INPUT_QUEUE_LENGTH);
         }
 
     protected:
@@ -1713,9 +1737,9 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
               )
           {
               // Remember the last frame and frame advantage
-              _last_inputs[input.frame % ARRAY_SIZE(_last_inputs)] = input;
-              _local[input.frame % ARRAY_SIZE(_local)] = advantage;
-              _remote[input.frame % ARRAY_SIZE(_remote)] = radvantage;
+              _last_inputs[input.frame % GGPO_ARRAY_SIZE(_last_inputs)] = input;
+              _local[input.frame % GGPO_ARRAY_SIZE(_local)] = advantage;
+              _remote[input.frame % GGPO_ARRAY_SIZE(_remote)] = radvantage;
           }
 
           int
@@ -1725,20 +1749,20 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
               int i, sum = 0;
               float advantage, radvantage;
 
-              for (i = 0; i < ARRAY_SIZE(_local); i++)
+              for (i = 0; i < GGPO_ARRAY_SIZE(_local); i++)
               {
                   sum += _local[i];
               }
 
-              advantage = sum / (float)ARRAY_SIZE(_local);
+              advantage = sum / (float)GGPO_ARRAY_SIZE(_local);
               sum = 0;
 
-              for (i = 0; i < ARRAY_SIZE(_remote); i++)
+              for (i = 0; i < GGPO_ARRAY_SIZE(_remote); i++)
               {
                   sum += _remote[i];
               }
 
-              radvantage = sum / (float)ARRAY_SIZE(_remote);
+              radvantage = sum / (float)GGPO_ARRAY_SIZE(_remote);
 
               static int count = 0;
               count++;
@@ -1771,7 +1795,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
               // Street Fighter), which could cause the player to miss moves.
               if (require_idle_input)
               {
-                  for (i = 1; i < ARRAY_SIZE(_last_inputs); i++)
+                  for (i = 1; i < GGPO_ARRAY_SIZE(_last_inputs); i++)
                   {
                       if (not _last_inputs[i].equal(_last_inputs[0], true))
                       {
@@ -1782,7 +1806,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
               }
 
               // Success!!! Recommend the number of frames to sleep and adjust
-              return MIN(sleep_frames, MAX_FRAME_ADVANTAGE);
+              return GGPO_MIN(sleep_frames, MAX_FRAME_ADVANTAGE);
           }
  
       protected:
@@ -1848,7 +1872,7 @@ namespace GGPO
               * structure so we can efficently copy frames via weak references.
               */
 
-             for (int i = 0; i < ARRAY_SIZE(_savedstate.frames); i++)
+             for (int i = 0; i < GGPO_ARRAY_SIZE(_savedstate.frames); i++)
              {
                  _callbacks.free_buffer((void*)&_savedstate.frames[i].buf); //lmfao this is ridiculous
              }
@@ -1924,7 +1948,7 @@ namespace GGPO
              int disconnect_flags = 0;
              char* output = (char*)values;
 
-             ASSERT(size >= _config.num_players * _config.input_size);
+             GGPO_ASSERT(size >= _config.num_players * _config.input_size);
 
              memset(output, 0, size);
 
@@ -1951,7 +1975,7 @@ namespace GGPO
              int disconnect_flags = 0;
              char* output = (char*)values;
 
-             ASSERT(size >= _config.num_players * _config.input_size);
+             GGPO_ASSERT(size >= _config.num_players * _config.input_size);
 
              memset(output, 0, size);
              for (int i = 0; i < _config.num_players; i++)
@@ -1995,7 +2019,7 @@ namespace GGPO
               * Flush our input queue and load the last frame.
               */
              LoadFrame(seek_to);
-             ASSERT(_framecount == seek_to);
+             GGPO_ASSERT(_framecount == seek_to);
 
              /*
               * Advance frame by frame (stuffing notifications back to
@@ -2008,7 +2032,7 @@ namespace GGPO
                  _callbacks.advance_frame(0);
              }
 
-             ASSERT(_framecount == framecount);
+             GGPO_ASSERT(_framecount == framecount);
 
              _rollingback = false;
 
@@ -2081,14 +2105,14 @@ namespace GGPO
 
              logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
 
-             ASSERT(state->buf and state->cbuf);
+             GGPO_ASSERT(state->buf and state->cbuf);
 
              _callbacks.load_game_state(state->buf);
 
              // Reset framecount and the head of the state ring-buffer to point in
              // advance of the current frame (as if we had just finished executing it).
              _framecount = state->frame;
-             _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
+             _savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
          }
 
          void
@@ -2104,13 +2128,13 @@ namespace GGPO
              _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
              logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
-             _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
+             _savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
          }
 
          int
              FindSavedFrameIndex(int frame)
          {
-             int i, count = ARRAY_SIZE(_savedstate.frames);
+             int i, count = GGPO_ARRAY_SIZE(_savedstate.frames);
 
              for (i = 0; i < count; i++)
              {
@@ -2121,7 +2145,7 @@ namespace GGPO
              }
              if (i == count)
              {
-                 ASSERT(FALSE);
+                 GGPO_ASSERT(FALSE);
              }
 
              return i;
@@ -2134,7 +2158,7 @@ namespace GGPO
 
              if (i < 0)
              {
-                 i = ARRAY_SIZE(_savedstate.frames) - 1;
+                 i = GGPO_ARRAY_SIZE(_savedstate.frames) - 1;
              }
 
              return _savedstate.frames[i];
@@ -2251,7 +2275,7 @@ namespace GGPO
                   void* cookie = NULL
               )
           {
-              ASSERT(_handle_count < MAX_POLLABLE_HANDLES - 1);
+              GGPO_ASSERT(_handle_count < MAX_POLLABLE_HANDLES - 1);
 
               _handles[_handle_count] = h;
               _handle_sinks[_handle_count] = PollSinkCb(sink, cookie);
@@ -2313,7 +2337,7 @@ namespace GGPO
 
               if (maxwait != INFINITE)
               {
-                  timeout = MIN(timeout, maxwait);
+                  timeout = GGPO_MIN(timeout, maxwait);
               }
 
               res = WaitForMultipleObjects(_handle_count, _handles, false, timeout);
@@ -2366,7 +2390,7 @@ namespace GGPO
 
                       if (waitTime == INFINITE or (timeout < waitTime))
                       {
-                          waitTime = MAX(timeout, 0);
+                          waitTime = GGPO_MAX(timeout, 0);
                       }
                   }
               }
@@ -2468,12 +2492,12 @@ namespace GGPO
              {
                  DWORD err = GGPO_GET_LAST_ERROR();
                  logger->LogAndPrint(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp", Logger::LogLevel::Error);
-                 ASSERT(FALSE && "Unknown error in sendto");
+                 GGPO_ASSERT(FALSE && "Unknown error in sendto");
              }
 
              char dst_ip[1024];
 
-             logger->LogAndPrint(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", Logger::LogLevel::Error);
+             logger->LogAndPrint(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, GGPO_ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", Logger::LogLevel::Error);
          }
 
          virtual bool
@@ -2504,7 +2528,7 @@ namespace GGPO
                  else if (len > 0)
                  {
                      char src_ip[1024];
-                     logger->LogAndPrint(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", Logger::LogLevel::Error);
+                     logger->LogAndPrint(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, GGPO_ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", Logger::LogLevel::Error);
                      UdpMsg* msg = (UdpMsg*)recv_buf;
                      _callbacks->OnMsg(recv_addr, msg, len);
                  }
@@ -2722,7 +2746,7 @@ namespace GGPO
 
             memset(&_state, 0, sizeof _state);
             memset(_peer_connect_status, 0, sizeof(_peer_connect_status));
-            for (int i = 0; i < ARRAY_SIZE(_peer_connect_status); i++) {
+            for (int i = 0; i < GGPO_ARRAY_SIZE(_peer_connect_status); i++) {
                 _peer_connect_status[i].last_frame = -1;
             }
             memset(&_peer_addr, 0, sizeof _peer_addr);
@@ -2874,7 +2898,7 @@ namespace GGPO
             _next_recv_seq = seq;
             LogMsg("recv", msg);
 
-            if (msg->hdr.type >= ARRAY_SIZE(table))
+            if (msg->hdr.type >= GGPO_ARRAY_SIZE(table))
             {
                 OnInvalid(msg, len);
             }
@@ -3085,7 +3109,7 @@ namespace GGPO
                 break;
 
             default:
-                ASSERT(FALSE and "Unknown UdpMsg type.");
+                GGPO_ASSERT(FALSE and "Unknown UdpMsg type.");
             }
         }
 
@@ -3162,7 +3186,7 @@ namespace GGPO
                 }
                 else
                 {
-                    ASSERT(entry.dest_addr.sin_addr.s_addr);
+                    GGPO_ASSERT(entry.dest_addr.sin_addr.s_addr);
 
                     _udp->SendTo((char*)entry.msg, entry.msg->PacketSize(), 0, (struct sockaddr*)&entry.dest_addr, sizeof entry.dest_addr);
 
@@ -3198,7 +3222,7 @@ namespace GGPO
                 msg->u.input.start_frame = _pending_output.Front().frame;
                 msg->u.input.input_size = (uint8_t)_pending_output.Front().size;
 
-                ASSERT(last.frame == -1 || last.frame + 1 == msg->u.input.start_frame);
+                GGPO_ASSERT(last.frame == -1 || last.frame + 1 == msg->u.input.start_frame);
 
                 for (j = 0; j < _pending_output.CurrentSize(); j++)
                 {
@@ -3206,11 +3230,11 @@ namespace GGPO
 
                     if (memcmp(current.bits, last.bits, current.size) != 0)
                     {
-                        ASSERT((GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8) < (1 << BITVECTOR_NIBBLE_SIZE));
+                        GGPO_ASSERT((GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8) < (1 << BITVECTOR_NIBBLE_SIZE));
 
                         for (i = 0; i < current.size * 8; i++)
                         {
-                            ASSERT(i < (1 << BITVECTOR_NIBBLE_SIZE));
+                            GGPO_ASSERT(i < (1 << BITVECTOR_NIBBLE_SIZE));
 
                             if (current.value(i) != last.value(i))
                             {
@@ -3244,7 +3268,7 @@ namespace GGPO
                 memset(msg->u.input.peer_connect_status, 0, sizeof(UdpMsg::connect_status) * UDP_MSG_MAX_PLAYERS);
             }
 
-            ASSERT(offset < MAX_COMPRESSED_BITS);
+            GGPO_ASSERT(offset < MAX_COMPRESSED_BITS);
 
             SendMsg(msg);
         }
@@ -3252,7 +3276,7 @@ namespace GGPO
         bool
             OnInvalid(UdpMsg* msg, int len)
         {
-            ASSERT(FALSE and "Invalid msg in UdpProtocol");
+            GGPO_ASSERT(FALSE and "Invalid msg in UdpProtocol");
             return false;
         }
 
@@ -3340,12 +3364,12 @@ namespace GGPO
                  */
                 UdpMsg::connect_status* remote_status = msg->u.input.peer_connect_status;
 
-                for (int i = 0; i < ARRAY_SIZE(_peer_connect_status); i++)
+                for (int i = 0; i < GGPO_ARRAY_SIZE(_peer_connect_status); i++)
                 {
-                    ASSERT(remote_status[i].last_frame >= _peer_connect_status[i].last_frame);
+                    GGPO_ASSERT(remote_status[i].last_frame >= _peer_connect_status[i].last_frame);
 
                     _peer_connect_status[i].disconnected = _peer_connect_status[i].disconnected || remote_status[i].disconnected;
-                    _peer_connect_status[i].last_frame = MAX(_peer_connect_status[i].last_frame, remote_status[i].last_frame);
+                    _peer_connect_status[i].last_frame = GGPO_MAX(_peer_connect_status[i].last_frame, remote_status[i].last_frame);
                 }
             }
 
@@ -3374,7 +3398,7 @@ namespace GGPO
                      * Keep walking through the frames (parsing bits) until we reach
                      * the inputs for the frame right after the one we're on.
                      */
-                    ASSERT(currentFrame <= (_last_received_input.frame + 1));
+                    GGPO_ASSERT(currentFrame <= (_last_received_input.frame + 1));
                     bool useInputs = currentFrame == _last_received_input.frame + 1;
 
                     while (BitVector_ReadBit(bits, &offset))
@@ -3394,7 +3418,7 @@ namespace GGPO
                             }
                         }
                     }
-                    ASSERT(offset <= numBits);
+                    GGPO_ASSERT(offset <= numBits);
 
                     /*
                      * Now if we want to use these inputs, go ahead and send them to
@@ -3406,7 +3430,7 @@ namespace GGPO
                          * Move forward 1 frame in the stream.
                          */
                         char desc[1024];
-                        ASSERT(currentFrame == _last_received_input.frame + 1);
+                        GGPO_ASSERT(currentFrame == _last_received_input.frame + 1);
                         _last_received_input.frame = currentFrame;
 
                         /*
@@ -3415,7 +3439,7 @@ namespace GGPO
                         UdpProtocol::Event evt(UdpProtocol::Event::Input);
                         evt.u.input.input = _last_received_input;
 
-                        _last_received_input.desc(desc, ARRAY_SIZE(desc));
+                        _last_received_input.desc(desc, GGPO_ARRAY_SIZE(desc));
 
                         _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
 
@@ -3435,7 +3459,7 @@ namespace GGPO
                 }
             }
 
-            ASSERT(_last_received_input.frame >= last_received_frame_number);
+            GGPO_ASSERT(_last_received_input.frame >= last_received_frame_number);
 
             /*
              * Get rid of our buffered input
@@ -3686,7 +3710,7 @@ namespace GGPO
               return size;
        }
  
-       ASSERT(false); // ??????????
+       GGPO_ASSERT(false); // ??????????
  
        return 0;
     }
@@ -3949,7 +3973,7 @@ namespace GGPO
           {
               _synchronizing = true;
 
-              for (int i = 0; i < ARRAY_SIZE(_inputs); i++)
+              for (int i = 0; i < GGPO_ARRAY_SIZE(_inputs); i++)
               {
                   _inputs[i].frame = -1;
               }
@@ -4012,7 +4036,7 @@ namespace GGPO
                   return ErrorCode::GENERAL_FAILURE;
               }
 
-              ASSERT(size >= _input_size * _num_players);
+              GGPO_ASSERT(size >= _input_size * _num_players);
               memcpy(values, input.bits, _input_size * _num_players);
 
               if (disconnect_flags)
@@ -4406,7 +4430,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                       if (total_min_confirmed >= 0)
                       {
-                          ASSERT(total_min_confirmed != INT_MAX);
+                          GGPO_ASSERT(total_min_confirmed != INT_MAX);
 
                           if (_num_spectators > 0)
                           {
@@ -4439,7 +4463,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                           for (int i = 0; i < _num_players; i++)
                           {
-                              interval = MAX(interval, _endpoints[i].RecommendFrameDelay());
+                              interval = GGPO_MAX(interval, _endpoints[i].RecommendFrameDelay());
                           }
 
                           if (interval > 0)
@@ -4825,7 +4849,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               Poll2Players(int current_frame)
           {
               // discard confirmed frames as appropriate
-              int total_min_confirmed = MAX_INT;
+              int total_min_confirmed = GGPO_MAX_INT;
 
               for (int i = 0; i < _num_players; i++)
               {
@@ -4838,7 +4862,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   }
                   if (not _local_connect_status[i].disconnected)
                   {
-                      total_min_confirmed = MIN(_local_connect_status[i].last_frame, total_min_confirmed);
+                      total_min_confirmed = GGPO_MIN(_local_connect_status[i].last_frame, total_min_confirmed);
                   }
 
                   logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
@@ -4861,12 +4885,12 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               int i, queue, last_received;
 
               // discard confirmed frames as appropriate
-              int total_min_confirmed = MAX_INT;
+              int total_min_confirmed = GGPO_MAX_INT;
 
               for (queue = 0; queue < _num_players; queue++)
               {
                   bool queue_connected = true;
-                  int queue_min_confirmed = MAX_INT;
+                  int queue_min_confirmed = GGPO_MAX_INT;
 
                   logger->LogAndPrint(format("considering queue {}.", queue), "p2p.cpp", Logger::LogLevel::Info);
 
@@ -4880,7 +4904,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           bool connected = _endpoints[i].GetPeerConnectStatus(queue, &last_received);
 
                           queue_connected = queue_connected && connected;
-                          queue_min_confirmed = MIN(last_received, queue_min_confirmed);
+                          queue_min_confirmed = GGPO_MIN(last_received, queue_min_confirmed);
                           logger->LogAndPrint(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
                       }
                       else
@@ -4891,14 +4915,14 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   // merge in our local status only if we're still connected!
                   if (not _local_connect_status[queue].disconnected)
                   {
-                      queue_min_confirmed = MIN(_local_connect_status[queue].last_frame, queue_min_confirmed);
+                      queue_min_confirmed = GGPO_MIN(_local_connect_status[queue].last_frame, queue_min_confirmed);
                   }
 
                   logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                   if (queue_connected)
                   {
-                      total_min_confirmed = MIN(queue_min_confirmed, total_min_confirmed);
+                      total_min_confirmed = GGPO_MIN(queue_min_confirmed, total_min_confirmed);
                   }
                   else
                   {
@@ -5022,7 +5046,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   {
                       int current_remote_frame = _local_connect_status[queue].last_frame;
                       int new_remote_frame = evt.u.input.input.frame;
-                      ASSERT(current_remote_frame == -1 || new_remote_frame == (current_remote_frame + 1));
+                      GGPO_ASSERT(current_remote_frame == -1 || new_remote_frame == (current_remote_frame + 1));
 
                       _sync.AddRemoteInput(queue, evt.u.input.input);
                       // Notify the other endpoints which frame we received from a peer
