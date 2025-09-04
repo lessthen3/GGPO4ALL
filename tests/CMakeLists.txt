@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 ####################################### Project definition
 
 project(
-	GGPO4ALL 
+	GGPO4ALL_Test 
 	VERSION 0.0.1 
 	DESCRIPTION "Cross Platform GGPO" 
 	LANGUAGES CXX
@@ -32,11 +32,11 @@ endif()
 
 if(WIN32)
 
-    set(PLATFORM_NAME "win")
+    set(PLATFORM_NAME "Windows")
 
 elseif(APPLE)
 
-	set(PLATFORM_NAME "osx")
+	set(PLATFORM_NAME "TIM_APPLE")
 
 	set_property( #Clang++/g++ compiler settings
 		TARGET ${target} 
@@ -49,7 +49,7 @@ elseif(APPLE)
 
 elseif(UNIX)
 
-	set(PLATFORM_NAME "linux")
+	set(PLATFORM_NAME "Some_Linux_Distro_idfk")
 
 	set_property( #Clang++/g++ compiler settings
 		TARGET ${target} 
@@ -81,40 +81,18 @@ set(
 	${OUTPUT_DIR}
 )
 
-####################################### Find All Source Files
-
-file(
-	GLOB_RECURSE 
-	GGPO4ALL_SOURCES 
-	CONFIGURE_DEPENDS
-	"${CMAKE_SOURCE_DIR}/GGPO4ALL.hpp"
-)
-
 ####################################### Library Target
 
 # STATIC LIBRARY
-
-add_library(
-	${PROJECT_NAME} INTERFACE 
-	${GGPO4ALL_SOURCES}
-)
-
 add_executable(
-	simple_test 
-	tests/main.cpp
+	${PROJECT_NAME} 
+	${PROJECT_SOURCE_DIR}/main.cpp
 )
-
-target_include_directories(simple_test PUBLIC
-	${GGPO4ALL_SOURCES}
-)
-
-set(Test simple_test)
 
 ####################################### Build Message
 
 message(STATUS "Building GGPO4ALL for ${PLATFORM_NAME} in ${CMAKE_BUILD_TYPE} mode.")
 message(STATUS "Build artifacts will be stored in: ${OUTPUT_DIR}")
-
 
 ####################################### Set Startup Project (Visual Studio & Xcode)
 
@@ -128,7 +106,7 @@ if(CMAKE_GENERATOR STREQUAL "Xcode")
 # Set GGPO4ALL as the startup project for Visual Studio
 
 elseif(CMAKE_GENERATOR MATCHES "Visual Studio")
-    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${Test})
-    message(STATUS "Setting ${Test} as the default startup project for VS2022")
+    set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
+    message(STATUS "Setting ${PROJECT_NAME} as the default startup project for VS2022")
 
 endif()

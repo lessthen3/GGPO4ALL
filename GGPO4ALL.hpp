@@ -1263,39 +1263,26 @@ namespace GGPO
             bits[i / 8] &= ~(1 << (i % 8)); 
         }
 
-        void 
-            desc
+        string 
+            Description
             (
-                char* buf, 
-                size_t buf_size, 
                 bool show_frame = true
             ) 
             const
         {
             GGPO_ASSERT(size);
-            size_t remaining = buf_size;
+            string f_Description;
 
             if (show_frame)
             {
-                remaining -= sprintf_s(buf, buf_size, "(frame:%d size:%d ", frame, size);
+                f_Description = format("(frame: {} size: {}", frame, size);
             }
             else
             {
-                remaining -= sprintf_s(buf, buf_size, "(size:%d ", size);
+                f_Description = format("(size: {} ", size);
             }
 
-            for (int i = 0; i < size * 8; i++)
-            {
-                char buf2[16];
-
-                if (value(i))
-                {
-                    int c = sprintf_s(buf2, GGPO_ARRAY_SIZE(buf2), "%2d ", i);
-                    strncat_s(buf, remaining, buf2, GGPO_ARRAY_SIZE(buf2));
-                    remaining -= c;
-                }
-            }
-            strncat_s(buf, remaining, ")", 1);
+            return f_Description;
         }
 
         bool 
