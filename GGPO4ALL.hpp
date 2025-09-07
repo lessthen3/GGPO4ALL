@@ -705,15 +705,16 @@ namespace GGPO
 
         f_Socket = socket(AF_INET, SOCK_DGRAM, 0);
         setsockopt(f_Socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&optval, sizeof optval);
-        setsockopt(f_Socket, SOL_SOCKET, SO_DONTLINGER, (const char*)&optval, sizeof optval);
+        //NOT SURE ABOUT DEFAULT SOCKET CONFIGS ON POSIX SYSTEMS VS MICROSOFT
+        // setsockopt(f_Socket, SOL_SOCKET, SO_DONTLINGER, (const char*)&optval, sizeof optval);
 
         // non-blocking...
         #if defined(_WIN32)
             u_long iMode = 1;
             ioctlsocket(f_Socket, FIONBIO, &iMode);
         #else
-            int flags = fcntl(s, F_GETFL, 0);
-            fcntl(s, F_SETFL, flags | O_NONBLOCK);
+            int flags = fcntl(f_Socket, F_GETFL, 0);
+            fcntl(f_Socket, F_SETFL, flags | O_NONBLOCK);
         #endif
 
         f_SocketIn.sin_family = AF_INET;
@@ -1318,13 +1319,6 @@ namespace GGPO
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
-
 #define PREVIOUS_FRAME(offset)   (((offset) == 0) ? (INPUT_QUEUE_LENGTH - 1) : ((offset) - 1))
 
 namespace GGPO
@@ -1334,9 +1328,15 @@ namespace GGPO
 
     class InputQueue
     {
+    private:
+        unique_ptr<Logger> input_queue_logger = nullptr;
+
     public:
         InputQueue(int input_size = DEFAULT_INPUT_SIZE) //???? why do it like this lmfao y not just do it inside the constructor body lol
         {
+            input_queue_logger = make_unique<Logger>();
+            input_queue_logger->Initialize("InputQueueLogger", Logger::LogLevel::All);
+            
             Init(-1, input_size);
         };
 
@@ -1372,9 +1372,9 @@ namespace GGPO
         }
 
         int
-            GetLastConfirmedFrame(Logger* logger)
+            GetLastConfirmedFrame()
         {
-            logger->GGPO_LOG(format("returning last confirmed frame {}.", _last_added_frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("returning last confirmed frame {}.", _last_added_frame), "input_queue.cpp", Logger::LogLevel::Info);
             return _last_added_frame;
         }
 
@@ -1399,11 +1399,14 @@ namespace GGPO
         }
 
         void
-            ResetPrediction(int frame)
+            ResetPrediction
+        (
+            int frame
+         )
         {
             GGPO_ASSERT(_first_incorrect_frame == GameInput::NullFrame || frame <= _first_incorrect_frame);
 
-            logger->LogAndPrint(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
 
             /*
              * There's nothing really to do other than reset our prediction
@@ -1415,7 +1418,10 @@ namespace GGPO
         }
 
         void
-            DiscardConfirmedFrames(int frame)
+            DiscardConfirmedFrames
+        (
+            int frame
+        )
         {
             GGPO_ASSERT(frame >= 0);
 
@@ -1424,7 +1430,7 @@ namespace GGPO
                 frame = GGPO_MIN(frame, _last_frame_requested);
             }
 
-            logger->LogAndPrint(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp", Logger::LogLevel::Info);
 
             if (frame >= _last_added_frame)
             {
@@ -1434,14 +1440,14 @@ namespace GGPO
             {
                 int offset = frame - _inputs[_tail].frame + 1;
 
-                logger->LogAndPrint(format("difference of {} frames.", offset), "input_queue.cpp", Logger::LogLevel::Info);
+                input_queue_logger->GGPO_LOG(format("difference of {} frames.", offset), "input_queue.cpp", Logger::LogLevel::Info);
                 GGPO_ASSERT(offset >= 0);
 
                 _tail = (_tail + offset) % INPUT_QUEUE_LENGTH;
                 _length -= offset;
             }
 
-            logger->LogAndPrint(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp", Logger::LogLevel::Info);
             GGPO_ASSERT(_length >= 0);
         }
 
@@ -1473,7 +1479,7 @@ namespace GGPO
                 GameInput* input
             )
         {
-            logger->LogAndPrint(format("requesting input frame {}.", requested_frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("requesting input frame {}.", requested_frame), "input_queue.cpp", Logger::LogLevel::Info);
 
             /*
             * No one should ever try to grab any input when we have a prediction
@@ -1503,7 +1509,7 @@ namespace GGPO
                     offset = (offset + _tail) % INPUT_QUEUE_LENGTH;
                     GGPO_ASSERT(_inputs[offset].frame == requested_frame);
                     *input = _inputs[offset];
-                    logger->LogAndPrint(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->GGPO_LOG(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp", Logger::LogLevel::Info);
                     return true;
                 }
 
@@ -1514,17 +1520,17 @@ namespace GGPO
                 */
                 if (requested_frame == 0)
                 {
-                    logger->LogAndPrint("basing new prediction frame from nothing, you're client wants frame 0.", "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->GGPO_LOG("basing new prediction frame from nothing, you're client wants frame 0.", "input_queue.cpp", Logger::LogLevel::Info);
                     _prediction.erase();
                 }
                 else if (_last_added_frame == GameInput::NullFrame)
                 {
-                    logger->LogAndPrint("basing new prediction frame from nothing, since we have no frames yet.", "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->GGPO_LOG("basing new prediction frame from nothing, since we have no frames yet.", "input_queue.cpp", Logger::LogLevel::Info);
                     _prediction.erase();
                 }
                 else
                 {
-                    logger->LogAndPrint(format("basing new prediction frame from previously added frame (queue entry:{}, frame:{}).", PREVIOUS_FRAME(_head), _inputs[PREVIOUS_FRAME(_head)].frame), "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->GGPO_LOG(format("basing new prediction frame from previously added frame (queue entry:{}, frame:{}).", PREVIOUS_FRAME(_head), _inputs[PREVIOUS_FRAME(_head)].frame), "input_queue.cpp", Logger::LogLevel::Info);
                     _prediction = _inputs[PREVIOUS_FRAME(_head)];
                 }
                 _prediction.frame++;
@@ -1539,7 +1545,7 @@ namespace GGPO
             */
             *input = _prediction;
             input->frame = requested_frame;
-            logger->LogAndPrint(format("returning prediction frame number {} ({}).", input->frame, _prediction.frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("returning prediction frame number {} ({}).", input->frame, _prediction.frame), "input_queue.cpp", Logger::LogLevel::Info);
 
             return false;
         }
@@ -1549,7 +1555,7 @@ namespace GGPO
         {
             int new_frame;
 
-            logger->LogAndPrint(format("adding input frame number {} to queue.", input.frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("adding input frame number {} to queue.", input.frame), "input_queue.cpp", Logger::LogLevel::Info);
 
             /*
             * These next two lines simply verify that inputs are passed in
@@ -1583,7 +1589,7 @@ namespace GGPO
         int
             AdvanceQueueHead(int frame)
         {
-            logger->LogAndPrint(format("advancing queue head to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("advancing queue head to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
 
             int expected_frame = _first_frame ? 0 : _inputs[PREVIOUS_FRAME(_head)].frame + 1;
 
@@ -1596,7 +1602,7 @@ namespace GGPO
                 * time we shoved a frame into the system.  In this case, there's
                 * no room on the queue.  Toss it.
                 */
-                logger->LogAndPrint(format("Dropping input frame {} (expected next frame to be {}).", frame, expected_frame), "input_queue.cpp", Logger::LogLevel::Info);
+                input_queue_logger->GGPO_LOG(format("Dropping input frame {} (expected next frame to be {}).", frame, expected_frame), "input_queue.cpp", Logger::LogLevel::Info);
                 return GameInput::NullFrame;
             }
 
@@ -1608,7 +1614,7 @@ namespace GGPO
                 * last frame in the queue several times in order to fill the space
                 * left.
                 */
-                logger->LogAndPrint(format("Adding padding frame {} to account for change in frame delay.", expected_frame), "input_queue.cpp", Logger::LogLevel::Info);
+                input_queue_logger->GGPO_LOG(format("Adding padding frame {} to account for change in frame delay.", expected_frame), "input_queue.cpp", Logger::LogLevel::Info);
                 GameInput& last_frame = _inputs[PREVIOUS_FRAME(_head)];
                 AddDelayedInputToQueue(last_frame, expected_frame);
                 expected_frame++;
@@ -1621,7 +1627,7 @@ namespace GGPO
         void
             AddDelayedInputToQueue(GameInput& input, int frame_number)
         {
-            logger->LogAndPrint(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->GGPO_LOG(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
 
             GGPO_ASSERT(input.size == _prediction.size);
 
@@ -1652,7 +1658,7 @@ namespace GGPO
                 */
                 if (_first_incorrect_frame == GameInput::NullFrame and not _prediction.equal(input, true))
                 {
-                    logger->LogAndPrint(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->GGPO_LOG(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
                     _first_incorrect_frame = frame_number;
                 }
 
@@ -1664,7 +1670,7 @@ namespace GGPO
                 */
                 if (_prediction.frame == _last_frame_requested and _first_incorrect_frame == GameInput::NullFrame)
                 {
-                    logger->LogAndPrint("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->GGPO_LOG("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp", Logger::LogLevel::Info);
                     _prediction.frame = GameInput::NullFrame;
                 }
                 else
@@ -1730,7 +1736,11 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
           }
 
           int
-              recommend_frame_wait_duration(bool require_idle_input)
+              recommend_frame_wait_duration
+              (
+                bool require_idle_input,
+                Logger* logger
+              )
           {
               // Average our local and remote frame advantages
               int i, sum = 0;
@@ -1767,7 +1777,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
               // sleep for.
               int sleep_frames = (int)(((radvantage - advantage) / 2) + 0.5);
 
-              logger->LogAndPrint(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp", Logger::LogLevel::Info);
+              logger->GGPO_LOG(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp", Logger::LogLevel::Info);
 
               // Some things just aren't worth correcting for.  Make sure
               // the difference is relevant before proceeding.
@@ -1786,7 +1796,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
                   {
                       if (not _last_inputs[i].equal(_last_inputs[0], true))
                       {
-                          logger->LogAndPrint(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp", Logger::LogLevel::Info);
+                          logger->GGPO_LOG(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp", Logger::LogLevel::Info);
                           return 0;
                       }
                   }
@@ -1819,6 +1829,9 @@ namespace GGPO
 
      class Sync
      {
+    private:
+        unique_ptr<Logger> sync_logger = nullptr;
+
      public:
          struct Config
          {
@@ -1846,6 +1859,9 @@ namespace GGPO
              _local_connect_status(connect_status),
              _input_queues(NULL)
          {
+            sync_logger = make_unique<Logger>();
+            sync_logger->Initialize("SyncLogger", Logger::LogLevel::All);
+
              _framecount = 0;
              _last_confirmed_frame = -1;
              _max_prediction_frames = 0;
@@ -1906,7 +1922,7 @@ namespace GGPO
 
              if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames)
              {
-                 logger->LogAndPrint("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", Logger::LogLevel::Info);
+                 sync_logger->GGPO_LOG("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", Logger::LogLevel::Info);
                  return false;
              }
 
@@ -1915,7 +1931,7 @@ namespace GGPO
                  SaveCurrentFrame();
              }
 
-             logger->LogAndPrint(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", Logger::LogLevel::Info);
+             sync_logger->GGPO_LOG(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", Logger::LogLevel::Info);
 
              input.frame = _framecount;
              _input_queues[queue].AddInput(input);
@@ -1999,7 +2015,7 @@ namespace GGPO
              int framecount = _framecount;
              int count = _framecount - seek_to;
 
-             logger->LogAndPrint("Catching up", "sync.cpp", Logger::LogLevel::Info);
+             sync_logger->GGPO_LOG("Catching up", "sync.cpp", Logger::LogLevel::Info);
              _rollingback = true;
 
              /*
@@ -2023,7 +2039,7 @@ namespace GGPO
 
              _rollingback = false;
 
-             logger->LogAndPrint("---", "sync.cpp", Logger::LogLevel::Info); //?????????????????????????
+             sync_logger->GGPO_LOG("---", "sync.cpp", Logger::LogLevel::Info); //?????????????????????????
          }
 
          void
@@ -2082,7 +2098,7 @@ namespace GGPO
              // find the frame in question
              if (frame == _framecount)
              {
-                 logger->LogAndPrint("Skipping NOP.", "sync.cpp", Logger::LogLevel::Info);
+                 sync_logger->GGPO_LOG("Skipping NOP.", "sync.cpp", Logger::LogLevel::Info);
                  return;
              }
 
@@ -2090,7 +2106,7 @@ namespace GGPO
              _savedstate.head = FindSavedFrameIndex(frame);
              SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-             logger->LogAndPrint(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
+             sync_logger->GGPO_LOG(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
 
              GGPO_ASSERT(state->buf and state->cbuf);
 
@@ -2114,7 +2130,7 @@ namespace GGPO
              state->frame = _framecount;
              _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
-             logger->LogAndPrint(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
+             sync_logger->GGPO_LOG(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
              _savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
          }
 
@@ -2173,7 +2189,7 @@ namespace GGPO
              for (int i = 0; i < _config.num_players; i++)
              {
                  int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-                 logger->LogAndPrint(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", Logger::LogLevel::Info);
+                 sync_logger->GGPO_LOG(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", Logger::LogLevel::Info);
 
                  if (incorrect != GameInput::NullFrame and (first_incorrect == GameInput::NullFrame or incorrect < first_incorrect))
                  {
@@ -2183,7 +2199,7 @@ namespace GGPO
 
              if (first_incorrect == GameInput::NullFrame)
              {
-                 logger->LogAndPrint("prediction ok.  proceeding.", "sync.cpp", Logger::LogLevel::Info);
+                 sync_logger->GGPO_LOG("prediction ok.  proceeding.", "sync.cpp", Logger::LogLevel::Info);
                  return true;
              }
 
@@ -2225,7 +2241,12 @@ namespace GGPO
  * in the LICENSE file.
  */
 
- 
+#if defined(_WIN32) || defined(_WIN64) //idfk
+    #define GGPO_HANDLE HANDLE
+ #else
+    #define GGPO_HANDLE uint32_t
+ #endif
+
  namespace GGPO
  {
      constexpr int MAX_POLLABLE_HANDLES = 64;
@@ -2244,15 +2265,20 @@ namespace GGPO
       {
       public:
 
-          Poll(void) :
-              _handle_count(0),
-              _start_time(0)
-          {
-              /*
-               * Create a dummy handle to simplify things.
-               */
-              _handles[_handle_count++] = CreateEvent(NULL, true, false, NULL);
-          }
+        Poll(void) :
+            _handle_count(0),
+            _start_time(0)
+        {
+            /*
+            * Create a dummy handle to simplify things.
+            */
+            //MSVC GARBO NEED A UNIX REPLACEMENT IF EVEN REQUIRED
+            #if defined(_WIN32) || defined(_WIN64)
+                _handles[_handle_count++] = CreateEvent(NULL, true, false, NULL);
+            #else
+
+            #endif
+        }
 
           void
               RegisterHandle
@@ -2414,16 +2440,6 @@ namespace GGPO
 
 ////////////////////////////////////////////////////////////////////////////////// ggponet.h
  
- 
-
-
- /* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
- 
 namespace GGPO
 {
      class Udp
@@ -2446,7 +2462,7 @@ namespace GGPO
          Udp()
          {
              udp_logger = make_unique<Logger>();
-             //udp_logger->Initialize()
+             udp_logger->Initialize("UDPLogger", Logger::LogLevel::All);
          }
 
          void
@@ -2457,7 +2473,7 @@ namespace GGPO
              _poll = poll;
              _poll->RegisterLoop(this);
 
-             logger->LogAndPrint(format("binding udp socket to port {}.", port), "udp.cpp", Logger::LogLevel::Info);
+             udp_logger->GGPO_LOG(format("binding udp socket to port {}.", port), "udp.cpp", Logger::LogLevel::Info);
              _socket = CreateSocket(port, 0);
          }
 
@@ -2478,13 +2494,13 @@ namespace GGPO
              if (res == GGPO_SOCKET_ERROR)
              {
                  DWORD err = GGPO_GET_LAST_ERROR();
-                 logger->LogAndPrint(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp", Logger::LogLevel::Error);
+                 udp_logger->GGPO_LOG(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp", Logger::LogLevel::Error);
                  GGPO_ASSERT(FALSE && "Unknown error in sendto");
              }
 
              char dst_ip[1024];
 
-             logger->LogAndPrint(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, GGPO_ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", Logger::LogLevel::Error);
+             udp_logger->GGPO_LOG(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, GGPO_ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", Logger::LogLevel::Error);
          }
 
          virtual bool
@@ -2507,7 +2523,7 @@ namespace GGPO
 
                      if (error != GGPO_SOCKET_ERROR_CODE)
                      {
-                         logger->LogAndPrint(format("recvfrom GGPO_GET_LAST_ERROR returned {} ({}).", error, error), "udp.cpp", Logger::LogLevel::Error);
+                         udp_logger->GGPO_LOG(format("recvfrom GGPO_GET_LAST_ERROR returned {} ({}).", error, error), "udp.cpp", Logger::LogLevel::Error);
                      }
 
                      break;
@@ -2515,7 +2531,7 @@ namespace GGPO
                  else if (len > 0)
                  {
                      char src_ip[1024];
-                     logger->LogAndPrint(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, GGPO_ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", Logger::LogLevel::Error);
+                     udp_logger->GGPO_LOG(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, GGPO_ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", Logger::LogLevel::Error);
                      UdpMsg* msg = (UdpMsg*)recv_buf;
                      _callbacks->OnMsg(recv_addr, msg, len);
                  }
@@ -2568,6 +2584,9 @@ namespace GGPO
 {
     class UdpProtocol
     {
+    private:
+        unique_ptr<Logger> udp_protocol_logger = nullptr;
+
     public:
         struct Stats
         {
@@ -2633,7 +2652,7 @@ namespace GGPO
                 next_interval = (_state.sync.roundtrips_remaining == NUM_SYNC_PACKETS) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
                 if (_last_send_time and _last_send_time + next_interval < now)
                 {
-                    logger->LogAndPrint(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp", Logger::LogLevel::Info);
                     SendSyncRequest();
                 }
                 break;
@@ -2642,7 +2661,7 @@ namespace GGPO
                 // xxx: rig all this up with a timer wrapper
                 if (not _state.running.last_input_packet_recv_time or _state.running.last_input_packet_recv_time + RUNNING_RETRY_INTERVAL < now)
                 {
-                    logger->LogAndPrint(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp", Logger::LogLevel::Info);
                     SendPendingOutput();
                     _state.running.last_input_packet_recv_time = now;
                 }
@@ -2664,7 +2683,7 @@ namespace GGPO
 
                 if (_last_send_time and _last_send_time + KEEP_ALIVE_INTERVAL < now)
                 {
-                    logger->LogAndPrint("Sending keep alive packet", "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG("Sending keep alive packet", "udp_proto.cpp", Logger::LogLevel::Info);
                     SendMsg(new UdpMsg(UdpMsg::KeepAlive));
                 }
 
@@ -2676,7 +2695,7 @@ namespace GGPO
                         (_last_recv_time + _disconnect_notify_start < now)
                         )
                 {
-                    logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp", Logger::LogLevel::Info);
                     Event e(Event::NetworkInterrupted);
                     e.u.network_interrupted.disconnect_timeout = _disconnect_timeout - _disconnect_notify_start;
                     QueueEvent(e);
@@ -2687,7 +2706,7 @@ namespace GGPO
                 {
                     if (not _disconnect_event_sent)
                     {
-                        logger->LogAndPrint(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->GGPO_LOG(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp", Logger::LogLevel::Info);
                         QueueEvent(Event(Event::Disconnected));
                         _disconnect_event_sent = true;
                     }
@@ -2697,7 +2716,7 @@ namespace GGPO
             case Disconnected:
                 if (_shutdown_timeout < now)
                 {
-                    logger->LogAndPrint("Shutting down udp connection.", "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG("Shutting down udp connection.", "udp_proto.cpp", Logger::LogLevel::Info);
                     _udp = NULL;
                     _shutdown_timeout = 0;
                 }
@@ -2727,6 +2746,9 @@ namespace GGPO
             _next_recv_seq(0),
             _udp(NULL)
         {
+            udp_protocol_logger = make_unique<Logger>();
+            udp_protocol_logger->Initialize("UDPProtocolLogger", Logger::LogLevel::All);
+
             _last_sent_input.init(-1, NULL, 1);
             _last_received_input.init(-1, NULL, 1);
             _last_acked_input.init(-1, NULL, 1);
@@ -2877,7 +2899,7 @@ namespace GGPO
                 // Log("checking sequence number -> next - seq : %d - %d = %d\n", seq, _next_recv_seq, skipped);
                 if (skipped > MAX_SEQ_DISTANCE)
                 {
-                    logger->LogAndPrint(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp", Logger::LogLevel::Info);
                     return;
                 }
             }
@@ -3029,7 +3051,7 @@ namespace GGPO
 
             _kbps_sent = int(Bps / 1024);
 
-            logger->LogAndPrint
+            udp_protocol_logger->GGPO_LOG
             (
                 format
                 (
@@ -3063,36 +3085,40 @@ namespace GGPO
         }
 
         void
-            LogMsg(const char* prefix, UdpMsg* msg)
+            LogMsg
+            (
+                const char* prefix,
+                UdpMsg* msg
+            )
         {
             switch (msg->hdr.type)
             {
             case UdpMsg::SyncRequest:
-                logger->LogAndPrint(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             case UdpMsg::SyncReply:
-                logger->LogAndPrint(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             case UdpMsg::QualityReport:
-                logger->LogAndPrint(format("{} quality report.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} quality report.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             case UdpMsg::QualityReply:
-                logger->LogAndPrint(format("{} quality reply.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} quality reply.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             case UdpMsg::KeepAlive:
-                logger->LogAndPrint(format("{} keep alive.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} keep alive.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             case UdpMsg::Input:
-                logger->LogAndPrint(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             case UdpMsg::InputAck:
-                logger->LogAndPrint(format("{} input ack.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} input ack.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
 
             default:
@@ -3101,12 +3127,16 @@ namespace GGPO
         }
 
         void
-            LogEvent(const char* prefix, const UdpProtocol::Event& evt)
+            LogEvent
+            (
+                const char* prefix, 
+                const UdpProtocol::Event& evt
+            )
         {
             switch (evt.type)
             {
             case UdpProtocol::Event::Synchronzied:
-                logger->LogAndPrint(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
                 break;
             }
         }
@@ -3160,7 +3190,7 @@ namespace GGPO
 
                     if (entry.msg) //check for a nullptr dereference
                     {
-                        logger->LogAndPrint(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->GGPO_LOG(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp", Logger::LogLevel::Info);
                     }
                     else
                     {
@@ -3184,7 +3214,7 @@ namespace GGPO
             }
             if (_oo_packet.msg and _oo_packet.send_time < Platform::GetCurrentTimeMS())
             {
-                logger->LogAndPrint("sending rogue oop!", "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG("sending rogue oop!", "udp_proto.cpp", Logger::LogLevel::Info);
 
                 _udp->SendTo((char*)_oo_packet.msg, _oo_packet.msg->PacketSize(), 0, (struct sockaddr*)&_oo_packet.dest_addr, sizeof _oo_packet.dest_addr);
 
@@ -3272,7 +3302,7 @@ namespace GGPO
         {
             if (_remote_magic_number != 0 and msg->hdr.magic != _remote_magic_number)
             {
-                logger->LogAndPrint(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp", Logger::LogLevel::Error);
+                udp_protocol_logger->GGPO_LOG(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp", Logger::LogLevel::Error);
                 return false;
             }
 
@@ -3288,13 +3318,13 @@ namespace GGPO
         {
             if (_current_state != Syncing)
             {
-                logger->LogAndPrint("Ignoring SyncReply while not synching.", "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG("Ignoring SyncReply while not synching.", "udp_proto.cpp", Logger::LogLevel::Info);
                 return msg->hdr.magic == _remote_magic_number;
             }
 
             if (msg->u.sync_reply.random_reply != _state.sync.random)
             {
-                logger->LogAndPrint(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp", Logger::LogLevel::Info);
                 return false;
             }
 
@@ -3304,11 +3334,11 @@ namespace GGPO
                 _connected = true;
             }
 
-            logger->LogAndPrint(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp", Logger::LogLevel::Info);
+            udp_protocol_logger->GGPO_LOG(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp", Logger::LogLevel::Info);
 
             if (--_state.sync.roundtrips_remaining == 0)
             {
-                logger->LogAndPrint("Synchronized!", "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG("Synchronized!", "udp_proto.cpp", Logger::LogLevel::Info);
                 QueueEvent(UdpProtocol::Event(UdpProtocol::Event::Synchronzied));
                 _current_state = Running;
                 _last_received_input.frame = -1;
@@ -3338,7 +3368,7 @@ namespace GGPO
             {
                 if (_current_state != Disconnected and not _disconnect_event_sent)
                 {
-                    logger->LogAndPrint("Disconnecting endpoint on remote request.", "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->GGPO_LOG("Disconnecting endpoint on remote request.", "udp_proto.cpp", Logger::LogLevel::Info);
                     QueueEvent(Event(Event::Disconnected));
                     _disconnect_event_sent = true;
                 }
@@ -3426,17 +3456,17 @@ namespace GGPO
                         UdpProtocol::Event evt(UdpProtocol::Event::Input);
                         evt.u.input.input = _last_received_input;
 
-                        _last_received_input.desc(desc, GGPO_ARRAY_SIZE(desc));
+                        _last_received_input.Description(desc, GGPO_ARRAY_SIZE(desc));
 
                         _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
 
-                        logger->LogAndPrint(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->GGPO_LOG(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp", Logger::LogLevel::Info);
                         QueueEvent(evt);
 
                     }
                     else
                     {
-                        logger->LogAndPrint(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->GGPO_LOG(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp", Logger::LogLevel::Info);
                     }
 
                     /*
@@ -3453,7 +3483,7 @@ namespace GGPO
              */
             while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input.ack_frame)
             {
-                logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", Logger::LogLevel::Info);
                 _last_acked_input = _pending_output.Front();
                 _pending_output.Pop();
             }
@@ -3468,7 +3498,7 @@ namespace GGPO
              */
             while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input_ack.ack_frame)
             {
-                logger->LogAndPrint(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->GGPO_LOG(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", Logger::LogLevel::Info);
                 _last_acked_input = _pending_output.Front();
                 _pending_output.Pop();
             }
@@ -3836,7 +3866,7 @@ namespace GGPO
              _sync.IncrementFrame();
              _current_input.erase();
 
-             logger->LogAndPrint(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", Logger::LogLevel::Info);
+             logger->GGPO_LOG(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", Logger::LogLevel::Info);
 
              if (_rollingback)
              {
@@ -3875,8 +3905,8 @@ namespace GGPO
 
                      if (info.frame != _sync.GetFrameCount()) //REPLACE THIS WITH AN IMMEDIATE END SESSION CALL INSTEAD OF CRASHING THE ENTIRE PROGRAM LMFAO
                      {
-                         logger->LogAndPrint(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", Logger::LogLevel::Error);
-                         logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
+                         logger->GGPO_LOG(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", Logger::LogLevel::Error);
+                         logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
                          exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                      }
 
@@ -3884,12 +3914,12 @@ namespace GGPO
 
                      if (info.checksum != checksum)
                      {
-                         logger->LogAndPrint(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", Logger::LogLevel::Error);
-                         logger->LogAndPrint(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
+                         logger->GGPO_LOG(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", Logger::LogLevel::Error);
+                         logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
                          exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                      }
 
-                     logger->LogAndPrint(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", Logger::LogLevel::Info);
+                     logger->GGPO_LOG(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", Logger::LogLevel::Info);
                  }
 
                  _last_verified = frame;
@@ -3911,9 +3941,9 @@ namespace GGPO
          void
              LogSaveStates(SavedInfo& info)
          {
-             logger->LogAndPrint(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", Logger::LogLevel::Info);
+             logger->GGPO_LOG(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", Logger::LogLevel::Info);
 
-             logger->LogAndPrint(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", Logger::LogLevel::Info);
+             logger->GGPO_LOG(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", Logger::LogLevel::Info);
          }
 
      protected:
@@ -4039,7 +4069,7 @@ namespace GGPO
           virtual ErrorCode
               IncrementFrame(void)
           {
-              logger->LogAndPrint(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", Logger::LogLevel::Info);
+              logger->GGPO_LOG(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", Logger::LogLevel::Info);
               DoPoll(0);
               PollUdpProtocolEvents();
 
@@ -4413,7 +4443,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           total_min_confirmed = PollNPlayers(current_frame);
                       }
 
-                      logger->LogAndPrint(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                      logger->GGPO_LOG(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                       if (total_min_confirmed >= 0)
                       {
@@ -4423,7 +4453,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           {
                               while (_next_spectator_frame <= total_min_confirmed)
                               {
-                                  logger->LogAndPrint(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", Logger::LogLevel::Info);
+                                  logger->GGPO_LOG(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", Logger::LogLevel::Info);
 
                                   GameInput input;
                                   input.frame = _next_spectator_frame;
@@ -4438,7 +4468,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                                   _next_spectator_frame++;
                               }
                           }
-                          logger->LogAndPrint(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                          logger->GGPO_LOG(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                           _sync.SetLastConfirmedFrame(total_min_confirmed);
                       }
@@ -4537,7 +4567,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                  // confirmed local frame for this player.  this must come first so it
                  // gets incorporated into the next packet we send.
 
-                  logger->LogAndPrint(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", Logger::LogLevel::Info);
                   _local_connect_status[queue].last_frame = input.frame;
 
                   // Send the input to all the remote players.
@@ -4581,7 +4611,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           virtual ErrorCode
               IncrementFrame(void)
           {
-              logger->LogAndPrint(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", Logger::LogLevel::Info);
+              logger->GGPO_LOG(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", Logger::LogLevel::Info);
               _sync.IncrementFrame();
               DoPoll(0);
               PollSyncEvents();
@@ -4617,7 +4647,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   int current_frame = _sync.GetFrameCount();
                   // xxx: we should be tracking who the local player is, but for now assume
                   // that if the endpoint is not initalized, this must be the local player.
-                  logger->LogAndPrint(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
                   for (int i = 0; i < _num_players; i++)
                   {
                       if (_endpoints[i].IsInitialized())
@@ -4628,7 +4658,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               }
               else
               {
-                  logger->LogAndPrint(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
                   DisconnectPlayerQueue(queue, _local_connect_status[queue].last_frame);
               }
               return ErrorCode::OK;
@@ -4747,16 +4777,16 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
               _endpoints[queue].Disconnect();
 
-              logger->LogAndPrint(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", Logger::LogLevel::Info);
+              logger->GGPO_LOG(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", Logger::LogLevel::Info);
 
               _local_connect_status[queue].disconnected = 1;
               _local_connect_status[queue].last_frame = syncto;
 
               if (syncto < framecount)
               {
-                  logger->LogAndPrint(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", Logger::LogLevel::Info);
                   _sync.AdjustSimulation(syncto);
-                  logger->LogAndPrint("finished adjusting simulation.", "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG("finished adjusting simulation.", "p2p.cpp", Logger::LogLevel::Info);
               }
 
               info.code = EventCode::DisconnectedFromPeer;
@@ -4852,15 +4882,15 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       total_min_confirmed = GGPO_MIN(_local_connect_status[i].last_frame, total_min_confirmed);
                   }
 
-                  logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                   if (not queue_connected && not _local_connect_status[i].disconnected)
                   {
-                      logger->LogAndPrint(format("disconnecting i {} by remote request.", i), "p2p.cpp", Logger::LogLevel::Info);
+                      logger->GGPO_LOG(format("disconnecting i {} by remote request.", i), "p2p.cpp", Logger::LogLevel::Info);
                       DisconnectPlayerQueue(i, total_min_confirmed);
                   }
 
-                  logger->LogAndPrint(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
               }
 
               return total_min_confirmed;
@@ -4879,7 +4909,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   bool queue_connected = true;
                   int queue_min_confirmed = GGPO_MAX_INT;
 
-                  logger->LogAndPrint(format("considering queue {}.", queue), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("considering queue {}.", queue), "p2p.cpp", Logger::LogLevel::Info);
 
                   for (i = 0; i < _num_players; i++)
                   {
@@ -4892,11 +4922,11 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                           queue_connected = queue_connected && connected;
                           queue_min_confirmed = GGPO_MIN(last_received, queue_min_confirmed);
-                          logger->LogAndPrint(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                          logger->GGPO_LOG(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
                       }
                       else
                       {
-                          logger->LogAndPrint(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", Logger::LogLevel::Info);
+                          logger->GGPO_LOG(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", Logger::LogLevel::Info);
                       }
                   }
                   // merge in our local status only if we're still connected!
@@ -4905,7 +4935,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       queue_min_confirmed = GGPO_MIN(_local_connect_status[queue].last_frame, queue_min_confirmed);
                   }
 
-                  logger->LogAndPrint(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                   if (queue_connected)
                   {
@@ -4918,11 +4948,11 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       // and later receive a disconnect notification for frame n-1.
                       if (not _local_connect_status[queue].disconnected or _local_connect_status[queue].last_frame > queue_min_confirmed)
                       {
-                          logger->LogAndPrint(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", Logger::LogLevel::Info);
+                          logger->GGPO_LOG(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", Logger::LogLevel::Info);
                           DisconnectPlayerQueue(queue, queue_min_confirmed);
                       }
                   }
-                  logger->LogAndPrint(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
               }
               return total_min_confirmed;
           }
@@ -5037,7 +5067,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                       _sync.AddRemoteInput(queue, evt.u.input.input);
                       // Notify the other endpoints which frame we received from a peer
-                      logger->LogAndPrint(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", Logger::LogLevel::Info);
+                      logger->GGPO_LOG(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", Logger::LogLevel::Info);
                       _local_connect_status[queue].last_frame = evt.u.input.input.frame;
                   }
                   break;

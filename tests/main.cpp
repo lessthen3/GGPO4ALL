@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <csignal>
 
+#define GGPO_USING_CONSOLE
+
 #include "../GGPO4ALL.hpp"
 
 static void
@@ -26,6 +28,8 @@ int
     main(int fp_ArgCount, const char* fp_ArgVector[])
 {
     signal(SIGSEGV, SegFaultHandler); //XXX: used for trying to close and flush logs on seg fault
+
+    GGPO::Print("UwU Rawr >O<", GGPO::Colours::BrightMagenta);
 
     return EXIT_SUCCESS;
 }

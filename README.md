@@ -6,6 +6,10 @@ A cross platform header only implementation of GGPO primarily meant for use with
 
 ## What's Different
 
+#### Addition of TCP
+
+GGPO originally only supported UDP but now GGPO4ALL supports TCP and UDP!
+
 #### Removal of callbacks
 
 GGPO4ALL functions different from the original GGPO whereas instead of setting and forgetting some obscure function pointers and just letting GGPO rip, I instead elected to just expose functionality for doing the networking directly with functions that allow end-users to implement any custom networking logic they desire.
