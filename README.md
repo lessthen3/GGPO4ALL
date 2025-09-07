@@ -16,11 +16,11 @@ GGPO4ALL functions different from the original GGPO whereas instead of setting a
 
 I find this is more in the spirit of how a library should work. With GGPO's old design you set function callbacks and just pray to god they do what you expect them to do.
 
-#### GGPO4ALL does not handle any compression on your behalf anymore, any compression that you may need has to be handled before sending and after receiving packets
+#### GGPO4ALL does not handle any compression on your behalf, any compression that you may need has to be handled before sending and after receiving packets
 
 I chose to remove zlib as a dependency because I think that letting the end-user decide which compression solution best suits their specific use case is overall a better design.
 
-#### GGPO4ALL does not handle serialization of data anymore
+#### GGPO4ALL does not handle serialization of data
 
 Instead GGPO4ALL expects all data to be fed in as a byte stream of serialized (and possibly compressed) data. GGPO4ALL will use this raw byte data to track overall state and any sync issues that may occur during runtime.
 

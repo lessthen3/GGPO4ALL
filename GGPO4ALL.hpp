@@ -1,13 +1,13 @@
-/*******************************************************************
- *                                             GGPO4ALL v0.0.1
- *Created by Ranyodh Mandur - ✨ 2025 and GroundStorm Studios, LLC. - ✨ 2009
+/************************************************************************************************************
+ *                                          GGPO4ALL v0.0.1
+ *              Created by Ranyodh Mandur - ✨ 2025 and GroundStorm Studios, LLC. - ✨ 2009
  *
- *                         Licensed under the MIT License (MIT).
- *                  For more details, see the LICENSE file or visit:
- *                        https://opensource.org/licenses/MIT
+ *                                Licensed under the MIT License (MIT).
+ *                           For more details, see the LICENSE file or visit:
+ *                                  https://opensource.org/licenses/MIT
  *
- *            GGPO4ALL is a free open source rollback netcode library
-********************************************************************/
+ *                        GGPO4ALL is a free open source rollback netcode library
+************************************************************************************************************/
 
 #pragma once // :^)
 
@@ -665,9 +665,12 @@ namespace GGPO
 #define GGPO_INVALID_SOCKET (SOCKET)(~0)
 
 #define GGPO_GET_LAST_ERROR() WSAGetLastError()
+#define GGPO_NETWORK_ERROR_CODE DWORD
+
 #define GGPO_CLOSE_SOCKET(__arg) closesocket(__arg)
 #define GGPO_SOCKET_ERROR_CODE WSAEWOULDBLOCK
 #else
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -681,8 +684,11 @@ namespace GGPO
 #define GGPO_INVALID_SOCKET (-1)
 
 #define GGPO_GET_LAST_ERROR() errno
+#define GGPO_NETWORK_ERROR_CODE uint32_t
+
 #define GGPO_CLOSE_SOCKET(__arg) close(__arg)
 #define GGPO_SOCKET_ERROR_CODE EWOULDBLOCK
+
 #endif
 
     constexpr auto GGPO_SOCKET_ERROR(-1);
@@ -1814,14 +1820,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
       };
  }
  
- /* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
-
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// SyncTestBackend
 
 namespace GGPO
 {
@@ -2474,7 +2473,7 @@ namespace GGPO
              _poll->RegisterLoop(this);
 
              udp_logger->GGPO_LOG(format("binding udp socket to port {}.", port), "udp.cpp", Logger::LogLevel::Info);
-             _socket = CreateSocket(port, 0);
+             _socket = CreateSocket(port, 0, udp_logger.get());
          }
 
          void
@@ -2493,7 +2492,7 @@ namespace GGPO
 
              if (res == GGPO_SOCKET_ERROR)
              {
-                 DWORD err = GGPO_GET_LAST_ERROR();
+                 GGPO_NETWORK_ERROR_CODE err = GGPO_GET_LAST_ERROR();
                  udp_logger->GGPO_LOG(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp", Logger::LogLevel::Error);
                  GGPO_ASSERT(FALSE && "Unknown error in sendto");
              }
@@ -2981,7 +2980,7 @@ namespace GGPO
             RecommendFrameDelay()
         {
             // XXX: require idle input should be a configuration parameter
-            return _timesync.recommend_frame_wait_duration(false);
+            return _timesync.recommend_frame_wait_duration(false, udp_protocol_logger.get());
         }
 
         void
@@ -3456,7 +3455,7 @@ namespace GGPO
                         UdpProtocol::Event evt(UdpProtocol::Event::Input);
                         evt.u.input.input = _last_received_input;
 
-                        _last_received_input.Description(desc, GGPO_ARRAY_SIZE(desc));
+                        _last_received_input.Description(desc);
 
                         _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
 
@@ -3747,8 +3746,11 @@ namespace GGPO
 
 namespace GGPO
 {
-     class SyncTestBackend
-     {
+    class SyncTestBackend
+    {
+    private:
+        unique_ptr<Logger> sync_test_backend_logger = nullptr;
+
      public:
          SyncTestBackend
          (
@@ -3758,6 +3760,9 @@ namespace GGPO
          ) :
              _sync(NULL)
          {
+            sync_test_backend_logger = make_unique<Logger>();
+            sync_test_backend_logger->Initialize("SyncTestBackendLogger", Logger::LogLevel::All);
+
              _num_players = num_players;
              _check_distance = frames;
              _last_verified = 0;
@@ -3866,7 +3871,7 @@ namespace GGPO
              _sync.IncrementFrame();
              _current_input.erase();
 
-             logger->GGPO_LOG(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", Logger::LogLevel::Info);
+             sync_test_backend_logger->GGPO_LOG(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", Logger::LogLevel::Info);
 
              if (_rollingback)
              {
@@ -3905,8 +3910,8 @@ namespace GGPO
 
                      if (info.frame != _sync.GetFrameCount()) //REPLACE THIS WITH AN IMMEDIATE END SESSION CALL INSTEAD OF CRASHING THE ENTIRE PROGRAM LMFAO
                      {
-                         logger->GGPO_LOG(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", Logger::LogLevel::Error);
-                         logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
+                         sync_test_backend_logger->GGPO_LOG(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", Logger::LogLevel::Error);
+                         sync_test_backend_logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
                          exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                      }
 
@@ -3914,12 +3919,12 @@ namespace GGPO
 
                      if (info.checksum != checksum)
                      {
-                         logger->GGPO_LOG(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", Logger::LogLevel::Error);
-                         logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
+                         sync_test_backend_logger->GGPO_LOG(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", Logger::LogLevel::Error);
+                         sync_test_backend_logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
                          exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                      }
 
-                     logger->GGPO_LOG(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", Logger::LogLevel::Info);
+                     sync_test_backend_logger->GGPO_LOG(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", Logger::LogLevel::Info);
                  }
 
                  _last_verified = frame;
@@ -3941,9 +3946,9 @@ namespace GGPO
          void
              LogSaveStates(SavedInfo& info)
          {
-             logger->GGPO_LOG(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", Logger::LogLevel::Info);
+             sync_test_backend_logger->GGPO_LOG(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", Logger::LogLevel::Info);
 
-             logger->GGPO_LOG(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", Logger::LogLevel::Info);
+             sync_test_backend_logger->GGPO_LOG(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", Logger::LogLevel::Info);
          }
 
      protected:
@@ -3972,47 +3977,52 @@ namespace GGPO
  
  namespace GGPO
  {
-      class SpectatorBackend
-      {
-      public:
-          SpectatorBackend
-          (
-              const char* gamename,
-              uint16_t localport,
-              int num_players,
-              int input_size,
-              char* hostip,
-              uint16_t hostport
-          ) :
-              _num_players(num_players),
-              _input_size(input_size),
-              _next_input_to_send(0)
-          {
-              _synchronizing = true;
+    class SpectatorBackend
+    {
+    private:
+        unique_ptr<Logger> spectator_backend_logger = nullptr;
+    public:
+        SpectatorBackend
+        (
+            const char* gamename,
+            uint16_t localport,
+            int num_players,
+            int input_size,
+            char* hostip,
+            uint16_t hostport
+        ) :
+            _num_players(num_players),
+            _input_size(input_size),
+            _next_input_to_send(0)
+        {
+            spectator_backend_logger = make_unique<Logger>();
+            spectator_backend_logger->Initialize("SpectatorBackendLogger", Logger::LogLevel::All);
 
-              for (int i = 0; i < GGPO_ARRAY_SIZE(_inputs); i++)
-              {
-                  _inputs[i].frame = -1;
-              }
+            _synchronizing = true;
 
-              /*
-               * Initialize the UDP port
-               */
-              _udp.Init(localport, &_poll, this);
+            for (int i = 0; i < GGPO_ARRAY_SIZE(_inputs); i++)
+            {
+                _inputs[i].frame = -1;
+            }
 
-              /*
-               * Init the host endpoint
-               */
-              _host.Init(&_udp, _poll, 0, hostip, hostport, NULL);
-              _host.Synchronize();
+            /*
+            * Initialize the UDP port
+            */
+            _udp.Init(localport, &_poll, this);
 
-              /*
-               * Preload the ROM
-               */
-               //_callbacks.begin_game(gamename); //?????????????????????????????????
-          }
+            /*
+            * Init the host endpoint
+            */
+            _host.Init(&_udp, _poll, 0, hostip, hostport, NULL);
+            _host.Synchronize();
 
-          virtual ~SpectatorBackend() = default;
+            /*
+            * Preload the ROM
+            */
+            //_callbacks.begin_game(gamename); //?????????????????????????????????
+        }
+
+        virtual ~SpectatorBackend() = default;
  
  
       public:
@@ -4069,7 +4079,7 @@ namespace GGPO
           virtual ErrorCode
               IncrementFrame(void)
           {
-              logger->GGPO_LOG(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", Logger::LogLevel::Info);
+              spectator_backend_logger->GGPO_LOG(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", Logger::LogLevel::Info);
               DoPoll(0);
               PollUdpProtocolEvents();
 
@@ -4355,8 +4365,11 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
  
  namespace GGPO
  {
-      class Peer2PeerBackend
-      {
+    class Peer2PeerBackend
+    {
+    private:
+        unique_ptr<Logger> p2p_backend_logger = nullptr;
+
       public:
           Peer2PeerBackend
           (
@@ -4373,6 +4386,9 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               _num_spectators(0),
               _next_spectator_frame(0)
           {
+            p2p_backend_logger = make_unique<Logger>();
+            p2p_backend_logger->Initialize("Peer2PeerBackendLogger", Logger::LogLevel::All);
+
               _synchronizing = true;
               _next_recommended_sleep = 0;
 
@@ -4443,7 +4459,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           total_min_confirmed = PollNPlayers(current_frame);
                       }
 
-                      logger->GGPO_LOG(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                      p2p_backend_logger->GGPO_LOG(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                       if (total_min_confirmed >= 0)
                       {
@@ -4453,7 +4469,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           {
                               while (_next_spectator_frame <= total_min_confirmed)
                               {
-                                  logger->GGPO_LOG(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", Logger::LogLevel::Info);
+                                  p2p_backend_logger->GGPO_LOG(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", Logger::LogLevel::Info);
 
                                   GameInput input;
                                   input.frame = _next_spectator_frame;
@@ -4468,7 +4484,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                                   _next_spectator_frame++;
                               }
                           }
-                          logger->GGPO_LOG(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->GGPO_LOG(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                           _sync.SetLastConfirmedFrame(total_min_confirmed);
                       }
@@ -4567,7 +4583,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                  // confirmed local frame for this player.  this must come first so it
                  // gets incorporated into the next packet we send.
 
-                  logger->GGPO_LOG(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", Logger::LogLevel::Info);
                   _local_connect_status[queue].last_frame = input.frame;
 
                   // Send the input to all the remote players.
@@ -4611,7 +4627,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           virtual ErrorCode
               IncrementFrame(void)
           {
-              logger->GGPO_LOG(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", Logger::LogLevel::Info);
+              p2p_backend_logger->GGPO_LOG(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", Logger::LogLevel::Info);
               _sync.IncrementFrame();
               DoPoll(0);
               PollSyncEvents();
@@ -4647,7 +4663,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   int current_frame = _sync.GetFrameCount();
                   // xxx: we should be tracking who the local player is, but for now assume
                   // that if the endpoint is not initalized, this must be the local player.
-                  logger->GGPO_LOG(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
                   for (int i = 0; i < _num_players; i++)
                   {
                       if (_endpoints[i].IsInitialized())
@@ -4658,7 +4674,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               }
               else
               {
-                  logger->GGPO_LOG(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
                   DisconnectPlayerQueue(queue, _local_connect_status[queue].last_frame);
               }
               return ErrorCode::OK;
@@ -4777,16 +4793,16 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
               _endpoints[queue].Disconnect();
 
-              logger->GGPO_LOG(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", Logger::LogLevel::Info);
+              p2p_backend_logger->GGPO_LOG(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", Logger::LogLevel::Info);
 
               _local_connect_status[queue].disconnected = 1;
               _local_connect_status[queue].last_frame = syncto;
 
               if (syncto < framecount)
               {
-                  logger->GGPO_LOG(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", Logger::LogLevel::Info);
                   _sync.AdjustSimulation(syncto);
-                  logger->GGPO_LOG("finished adjusting simulation.", "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG("finished adjusting simulation.", "p2p.cpp", Logger::LogLevel::Info);
               }
 
               info.code = EventCode::DisconnectedFromPeer;
@@ -4882,15 +4898,15 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       total_min_confirmed = GGPO_MIN(_local_connect_status[i].last_frame, total_min_confirmed);
                   }
 
-                  logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                   if (not queue_connected && not _local_connect_status[i].disconnected)
                   {
-                      logger->GGPO_LOG(format("disconnecting i {} by remote request.", i), "p2p.cpp", Logger::LogLevel::Info);
+                      p2p_backend_logger->GGPO_LOG(format("disconnecting i {} by remote request.", i), "p2p.cpp", Logger::LogLevel::Info);
                       DisconnectPlayerQueue(i, total_min_confirmed);
                   }
 
-                  logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
               }
 
               return total_min_confirmed;
@@ -4909,7 +4925,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   bool queue_connected = true;
                   int queue_min_confirmed = GGPO_MAX_INT;
 
-                  logger->GGPO_LOG(format("considering queue {}.", queue), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("considering queue {}.", queue), "p2p.cpp", Logger::LogLevel::Info);
 
                   for (i = 0; i < _num_players; i++)
                   {
@@ -4922,11 +4938,11 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                           queue_connected = queue_connected && connected;
                           queue_min_confirmed = GGPO_MIN(last_received, queue_min_confirmed);
-                          logger->GGPO_LOG(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->GGPO_LOG(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
                       }
                       else
                       {
-                          logger->GGPO_LOG(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->GGPO_LOG(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", Logger::LogLevel::Info);
                       }
                   }
                   // merge in our local status only if we're still connected!
@@ -4935,7 +4951,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       queue_min_confirmed = GGPO_MIN(_local_connect_status[queue].last_frame, queue_min_confirmed);
                   }
 
-                  logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
 
                   if (queue_connected)
                   {
@@ -4948,11 +4964,12 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       // and later receive a disconnect notification for frame n-1.
                       if (not _local_connect_status[queue].disconnected or _local_connect_status[queue].last_frame > queue_min_confirmed)
                       {
-                          logger->GGPO_LOG(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->GGPO_LOG(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", Logger::LogLevel::Info);
                           DisconnectPlayerQueue(queue, queue_min_confirmed);
                       }
                   }
-                  logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+
+                  p2p_backend_logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
               }
               return total_min_confirmed;
           }
@@ -5067,7 +5084,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                       _sync.AddRemoteInput(queue, evt.u.input.input);
                       // Notify the other endpoints which frame we received from a peer
-                      logger->GGPO_LOG(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", Logger::LogLevel::Info);
+                      p2p_backend_logger->GGPO_LOG(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", Logger::LogLevel::Info);
                       _local_connect_status[queue].last_frame = evt.u.input.input.frame;
                   }
                   break;
@@ -5146,224 +5163,235 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
 namespace GGPO
 {
-     ErrorCode
-         ggpo_start_session
-         (
-             Session** session,
-             const char* game,
-             int num_players,
-             int input_size,
-             unsigned short localport
-         )
-     {
-         *session = (Session*)new Peer2PeerBackend
-         (
-             game,
-             localport,
-             num_players,
-             input_size
-         );
 
-         return ErrorCode::OK;
-     }
+    struct SessionManager
+    {
+    private:
 
-     ErrorCode
-         ggpo_add_player
-         (
-             Session* ggpo,
-             Player* player,
-             PlayerHandle* handle
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
+    public:
 
-         return ggpo->AddPlayer(player, handle);
-     }
+        ErrorCode
+            ggpo_start_session
+            (
+                Session** session,
+                const char* game,
+                int num_players,
+                int input_size,
+                unsigned short localport
+            )
+        {
+            *session = (Session*)new Peer2PeerBackend
+            (
+                game,
+                localport,
+                num_players,
+                input_size
+            );
+
+            return ErrorCode::OK;
+        }
+
+        ErrorCode
+            ggpo_add_player
+            (
+                Session* ggpo,
+                Player* player,
+                PlayerHandle* handle
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+
+            return ggpo->AddPlayer(player, handle);
+        }
+
+        ErrorCode
+            ggpo_start_synctest
+            (
+                Session** ggpo,
+                char* game,
+                int num_players,
+                int input_size,
+                int frames
+            )
+        {
+            *ggpo = (Session*)new SyncTestBackend(game, frames, num_players);
+            return ErrorCode::OK;
+        }
+
+        ErrorCode
+            ggpo_set_frame_delay
+            (
+                Session* ggpo,
+                PlayerHandle player,
+                int frame_delay
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+
+            return ggpo->SetFrameDelay(player, frame_delay);
+        }
+
+        ErrorCode
+            ggpo_idle
+            (
+                Session* ggpo,
+                int timeout
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->DoPoll(timeout);
+        }
+
+        ErrorCode
+            ggpo_add_local_input
+            (
+                Session* ggpo,
+                PlayerHandle player,
+                void* values,
+                int size
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->AddLocalInput(player, values, size);
+        }
+
+        ErrorCode
+            ggpo_synchronize_input
+            (
+                Session* ggpo,
+                void* values,
+                int size,
+                int* disconnect_flags
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->SyncInput(values, size, disconnect_flags);
+        }
+
+        ErrorCode
+            ggpo_disconnect_player
+            (
+                Session* ggpo,
+                PlayerHandle player
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->DisconnectPlayer(player);
+        }
+
+        ErrorCode
+            ggpo_advance_frame(Session* ggpo)
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->IncrementFrame();
+        }
+
+        ErrorCode
+            ggpo_client_chat(Session* ggpo, char* text)
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->Chat(text);
+        }
+
+        ErrorCode
+            ggpo_get_network_stats
+            (
+                Session* ggpo,
+                PlayerHandle player,
+                NetworkStats* stats
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->GetNetworkStats(stats, player);
+        }
 
 
+        ErrorCode
+            ggpo_close_session(Session* ggpo)
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            delete ggpo;
+            return ErrorCode::OK;
+        }
 
-     ErrorCode
-         ggpo_start_synctest
-         (
-             Session** ggpo,
-             char* game,
-             int num_players,
-             int input_size,
-             int frames
-         )
-     {
-         *ggpo = (Session*)new SyncTestBackend(game, frames, num_players);
-         return ErrorCode::OK;
-     }
+        ErrorCode
+            ggpo_set_disconnect_timeout(Session* ggpo, int timeout)
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            return ggpo->SetDisconnectTimeout(timeout);
+        }
 
-     ErrorCode
-         ggpo_set_frame_delay
-         (
-             Session* ggpo,
-             PlayerHandle player,
-             int frame_delay
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
+        ErrorCode
+            ggpo_set_disconnect_notify_start
+            (
+                Session* ggpo,
+                int timeout
+            )
+        {
+            if (not ggpo)
+            {
+                return ErrorCode::INVALID_SESSION;
+            }
+            
+            return ggpo->SetDisconnectNotifyStart(timeout);
+        }
 
-         return ggpo->SetFrameDelay(player, frame_delay);
-     }
-
-     ErrorCode
-         ggpo_idle
-         (
-             Session* ggpo,
-             int timeout
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->DoPoll(timeout);
-     }
-
-     ErrorCode
-         ggpo_add_local_input
-         (
-             Session* ggpo,
-             PlayerHandle player,
-             void* values,
-             int size
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->AddLocalInput(player, values, size);
-     }
-
-     ErrorCode
-         ggpo_synchronize_input
-         (
-             Session* ggpo,
-             void* values,
-             int size,
-             int* disconnect_flags
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->SyncInput(values, size, disconnect_flags);
-     }
-
-     ErrorCode
-         ggpo_disconnect_player
-         (
-             Session* ggpo,
-             PlayerHandle player
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->DisconnectPlayer(player);
-     }
-
-     ErrorCode
-         ggpo_advance_frame(Session* ggpo)
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->IncrementFrame();
-     }
-
-     ErrorCode
-         ggpo_client_chat(Session* ggpo, char* text)
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->Chat(text);
-     }
-
-     ErrorCode
-         ggpo_get_network_stats
-         (
-             Session* ggpo,
-             PlayerHandle player,
-             NetworkStats* stats
-         )
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->GetNetworkStats(stats, player);
-     }
-
-
-     ErrorCode
-         ggpo_close_session(Session* ggpo)
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         delete ggpo;
-         return ErrorCode::OK;
-     }
-
-     ErrorCode
-         ggpo_set_disconnect_timeout(Session* ggpo, int timeout)
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->SetDisconnectTimeout(timeout);
-     }
-
-     ErrorCode
-         ggpo_set_disconnect_notify_start(Session* ggpo, int timeout)
-     {
-         if (not ggpo)
-         {
-             return ErrorCode::INVALID_SESSION;
-         }
-         return ggpo->SetDisconnectNotifyStart(timeout);
-     }
-
-     ErrorCode
-         ggpo_start_spectating
-         (
-             Session** session,
-             const char* game,
-             int num_players,
-             int input_size,
-             unsigned short local_port,
-             char* host_ip,
-             unsigned short host_port
-         )
-     {
-         *session = (Session*) new SpectatorBackend
-         (
-             game,
-             local_port,
-             num_players,
-             input_size,
-             host_ip,
-             host_port
-         );
-         return ErrorCode::OK;
-     }
-}
+        ErrorCode
+            StartSpectating
+            (
+                Session** session,
+                const char* game,
+                int num_players,
+                int input_size,
+                unsigned short local_port,
+                char* host_ip,
+                unsigned short host_port
+            )
+        {
+            *session = (Session*) new SpectatorBackend
+            (
+                game,
+                local_port,
+                num_players,
+                input_size,
+                host_ip,
+                host_port
+            );
+            return ErrorCode::OK;
+        }
+    };
+} //namespace GGPO
 
