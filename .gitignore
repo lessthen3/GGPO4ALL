@@ -1,5 +1,5 @@
 # build folder
-/tests/build
+**/build
 
 
 **.DS_Store

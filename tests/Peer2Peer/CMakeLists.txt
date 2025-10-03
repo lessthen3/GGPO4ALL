@@ -87,6 +87,7 @@ set(
 add_executable(
 	${PROJECT_NAME} 
 	${PROJECT_SOURCE_DIR}/main.cpp
+	${PROJECT_SOURCE_DIR}/../GGPO4ALL.hpp
 )
 
 ####################################### Build Message

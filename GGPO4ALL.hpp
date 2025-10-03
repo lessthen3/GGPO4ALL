@@ -1120,6 +1120,69 @@ namespace GGPO{
 #endif
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Bitvector stuff idfk
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace GGPO
+{
+
+#define GGPO_BITVECTOR_NIBBLE_SIZE 8
+
+    void
+        BitVector_SetBit(uint8_t* vector, int* offset)
+    {
+        vector[(*offset) / 8] |= (1 << ((*offset) % 8));
+        *offset += 1;
+    }
+
+    void
+        BitVector_ClearBit(uint8_t* vector, int* offset)
+    {
+        vector[(*offset) / 8] &= ~(1 << ((*offset) % 8));
+        *offset += 1;
+    }
+
+    void
+        BitVector_WriteNibblet(uint8_t* vector, int nibble, int* offset)
+    {
+        GGPO_ASSERT(nibble < (1 << GGPO_BITVECTOR_NIBBLE_SIZE));
+
+        for (int i = 0; i < GGPO_BITVECTOR_NIBBLE_SIZE; i++)
+        {
+            if (nibble & (1 << i)) 
+            {
+                BitVector_SetBit(vector, offset);
+            }
+            else 
+            {
+                BitVector_ClearBit(vector, offset);
+            }
+        }
+    }
+
+    int
+        BitVector_ReadBit(uint8_t* vector, int* offset)
+    {
+        int retval = !!(vector[(*offset) / 8] & (1 << ((*offset) % 8)));
+        *offset += 1;
+        return retval;
+    }
+
+    int
+        BitVector_ReadNibblet(uint8_t* vector, int* offset)
+    {
+        int nibblet = 0;
+
+        for (int i = 0; i < GGPO_BITVECTOR_NIBBLE_SIZE; i++)
+        {
+            nibblet |= (BitVector_ReadBit(vector, offset) << i);
+        }
+
+        return nibblet;
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace GGPO
@@ -1874,11 +1937,6 @@ namespace GGPO
               * structure so we can efficently copy frames via weak references.
               */
 
-             for (int i = 0; i < GGPO_ARRAY_SIZE(_savedstate.frames); i++)
-             {
-                 _callbacks.free_buffer((void*)&_savedstate.frames[i].buf); //lmfao this is ridiculous
-             }
-
              delete[] _input_queues;
              _input_queues = NULL;
          }
@@ -1888,7 +1946,6 @@ namespace GGPO
          {
              _config = config;
              _framecount = 0;
-             _rollingback = false;
 
              _max_prediction_frames = config.num_prediction_frames;
 
@@ -1999,49 +2056,6 @@ namespace GGPO
          }
 
          void
-             CheckSimulation(int timeout)
-         {
-             int seek_to;
-             if (not CheckSimulationConsistency(&seek_to))
-             {
-                 AdjustSimulation(seek_to);
-             }
-         }
-
-         void
-             AdjustSimulation(int seek_to)
-         {
-             int framecount = _framecount;
-             int count = _framecount - seek_to;
-
-             sync_logger->GGPO_LOG("Catching up", "sync.cpp", Logger::LogLevel::Info);
-             _rollingback = true;
-
-             /*
-              * Flush our input queue and load the last frame.
-              */
-             LoadFrame(seek_to);
-             GGPO_ASSERT(_framecount == seek_to);
-
-             /*
-              * Advance frame by frame (stuffing notifications back to
-              * the master).
-              */
-             ResetPrediction(_framecount);
-
-             for (int i = 0; i < count; i++)
-             {
-                 _callbacks.advance_frame(0);
-             }
-
-             GGPO_ASSERT(_framecount == framecount);
-
-             _rollingback = false;
-
-             sync_logger->GGPO_LOG("---", "sync.cpp", Logger::LogLevel::Info); //?????????????????????????
-         }
-
-         void
              IncrementFrame(void)
          {
              _framecount++;
@@ -2053,13 +2067,6 @@ namespace GGPO
              const
          {
              return _framecount;
-         }
-
-         bool
-             InRollback()
-             const
-         {
-             return _rollingback;
          }
 
          bool
@@ -2094,43 +2101,43 @@ namespace GGPO
          void
              LoadFrame(int frame)
          {
-             // find the frame in question
-             if (frame == _framecount)
-             {
-                 sync_logger->GGPO_LOG("Skipping NOP.", "sync.cpp", Logger::LogLevel::Info);
-                 return;
-             }
+             //// find the frame in question
+             //if (frame == _framecount)
+             //{
+             //    sync_logger->GGPO_LOG("Skipping NOP.", "sync.cpp", Logger::LogLevel::Info);
+             //    return;
+             //}
 
-             // Move the head pointer back and load it up
-             _savedstate.head = FindSavedFrameIndex(frame);
-             SavedFrame* state = _savedstate.frames + _savedstate.head;
+             //// Move the head pointer back and load it up
+             //_savedstate.head = FindSavedFrameIndex(frame);
+             //SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-             sync_logger->GGPO_LOG(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
+             //sync_logger->GGPO_LOG(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
 
-             GGPO_ASSERT(state->buf and state->cbuf);
+             //GGPO_ASSERT(state->buf and state->cbuf);
 
-             _callbacks.load_game_state(state->buf);
+             //_callbacks.load_game_state(state->buf);
 
-             // Reset framecount and the head of the state ring-buffer to point in
-             // advance of the current frame (as if we had just finished executing it).
-             _framecount = state->frame;
-             _savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
+             //// Reset framecount and the head of the state ring-buffer to point in
+             //// advance of the current frame (as if we had just finished executing it).
+             //_framecount = state->frame;
+             //_savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
          }
 
          void
              SaveCurrentFrame()
          {
-             /*
-              * See StateCompress for the real save feature implemented by FinalBurn.
-              * Write everything into the head, then advance the head pointer.
-              */
-             SavedFrame* state = _savedstate.frames + _savedstate.head;
+             ///*
+             // * See StateCompress for the real save feature implemented by FinalBurn.
+             // * Write everything into the head, then advance the head pointer.
+             // */
+             //SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-             state->frame = _framecount;
-             _callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
+             //state->frame = _framecount;
+             //_callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
-             sync_logger->GGPO_LOG(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
-             _savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
+             //sync_logger->GGPO_LOG(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
+             //_savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
          }
 
          int
@@ -2180,33 +2187,6 @@ namespace GGPO
              return true;
          }
 
-         bool
-             CheckSimulationConsistency(int* seekTo)
-         {
-             int first_incorrect = GameInput::NullFrame;
-
-             for (int i = 0; i < _config.num_players; i++)
-             {
-                 int incorrect = _input_queues[i].GetFirstIncorrectFrame();
-                 sync_logger->GGPO_LOG(format("considering incorrect frame {} reported by queue {}.", incorrect, i), "sync.cpp", Logger::LogLevel::Info);
-
-                 if (incorrect != GameInput::NullFrame and (first_incorrect == GameInput::NullFrame or incorrect < first_incorrect))
-                 {
-                     first_incorrect = incorrect;
-                 }
-             }
-
-             if (first_incorrect == GameInput::NullFrame)
-             {
-                 sync_logger->GGPO_LOG("prediction ok.  proceeding.", "sync.cpp", Logger::LogLevel::Info);
-                 return true;
-             }
-
-             *seekTo = first_incorrect;
-
-             return false;
-         }
-
          void
              ResetPrediction(int frameNumber)
          {
@@ -2220,7 +2200,6 @@ namespace GGPO
          SavedState     _savedstate;
          Config         _config;
 
-         bool           _rollingback;
          int            _last_confirmed_frame;
          int            _framecount;
          int            _max_prediction_frames;
@@ -3025,9 +3004,9 @@ namespace GGPO
 
         struct QueueEntry
         {
-            int         queue_time;
+            int queue_time = -1;
             sockaddr_in dest_addr;
-            UdpMsg* msg;
+            UdpMsg* msg = nullptr;
 
             QueueEntry() {}
             QueueEntry(int time, sockaddr_in& dst, UdpMsg* m) : queue_time(time), dest_addr(dst), msg(m) { }
@@ -3246,11 +3225,11 @@ namespace GGPO
 
                     if (memcmp(current.bits, last.bits, current.size) != 0)
                     {
-                        GGPO_ASSERT((GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8) < (1 << BITVECTOR_NIBBLE_SIZE));
+                        GGPO_ASSERT((GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8) < (1 << GGPO_BITVECTOR_NIBBLE_SIZE));
 
                         for (i = 0; i < current.size * 8; i++)
                         {
-                            GGPO_ASSERT(i < (1 << BITVECTOR_NIBBLE_SIZE));
+                            GGPO_ASSERT(i < (1 << GGPO_BITVECTOR_NIBBLE_SIZE));
 
                             if (current.value(i) != last.value(i))
                             {
@@ -3544,9 +3523,9 @@ namespace GGPO
         int            _oop_percent;
         struct 
         {
-            int         send_time;
+            int         send_time = -1;
             sockaddr_in dest_addr;
-            UdpMsg* msg;
+            UdpMsg* msg = nullptr;
         } _oo_packet;
         RingBuffer<QueueEntry, 64> _send_queue;
 
