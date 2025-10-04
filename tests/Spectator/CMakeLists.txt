@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 ####################################### Project definition
 
 project(
-	Peer2Peer_Test 
+	Spectator_Test 
 	VERSION 0.0.1 
 	DESCRIPTION "Cross Platform GGPO" 
 	LANGUAGES CXX
@@ -43,22 +43,14 @@ elseif(APPLE)
 		APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Wpedantic
 	)
 
-	if(CMAKE_BUILD_TYPE STREQUAL "Debug") #treat warnings as errors for debug builds
-		set_property(TARGET ${target} APPEND PROPERTY COMPILE_OPTIONS -Werror)
-	endif()
-
 elseif(UNIX)
 
-	set(PLATFORM_NAME "Some_Linux_Distro_idfk")
+	set(PLATFORM_NAME "Some_Linux_Distro_idfk_or_haiku_or_bsd")
 
 	set_property( #Clang++/g++ compiler settings
 		TARGET ${target} 
 		APPEND PROPERTY COMPILE_OPTIONS -Wall -Wextra -Wpedantic
 	)
-
-	if(CMAKE_BUILD_TYPE STREQUAL "Debug") #treat warnings as errors for debug builds
-		set_property(TARGET ${target} APPEND PROPERTY COMPILE_OPTIONS -Werror)
-	endif()
 
 else()
     message(FATAL_ERROR "Unsupported platform!")
@@ -82,7 +74,7 @@ add_executable(
 
 ####################################### Build Message
 
-message(STATUS "Building GGPO4ALL for ${PLATFORM_NAME} in ${CMAKE_BUILD_TYPE} mode.")
+message(STATUS "Building Spectator Test for ${PLATFORM_NAME} in ${CMAKE_BUILD_TYPE} mode.")
 message(STATUS "Build artifacts will be stored in: ${OUTPUT_DIR}")
 
 ####################################### Set Startup Project (Visual Studio & Xcode)

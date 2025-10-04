@@ -8,8 +8,34 @@
  *
  *                        GGPO4ALL is a free open source rollback netcode library
 ************************************************************************************************************/
-
 #pragma once // :^)
+
+//DO NOT DO "using namespace GGPO", it's bad practice and will bring in the using namespace std bit so if you do that you deserve to be miserable
+
+namespace GGPO //I like using namespace std, but ik other ppl don't so this will limit its spread just don't do using namespace GGPO
+{
+    using namespace std; // >O<
+}
+
+/*
+if you want to run GGPO4ALL in debug mode define:
+
+#define GGPO_DEBUG
+
+if you want terminal output from GGPO4ALL then you have to define:
+
+#define GGPO_USING_CONSOLE
+
+IMPORTANT: if you want to use console on windows, you must enable ANSI colour codes or call the EnableColours() function
+
+before including GGPO4ALL anywhere in your code
+*/
+
+//you can change these here if u want
+
+#define GGPO_DEFAULT_LOG_LEVEL_FILTER Logger::LogLevel::WARNING_LOG | Logger::LogLevel::ERROR_LOG | Logger::LogLevel::FATAL_LOG 
+
+#define GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY "./logs"
 
 #include <format>
 #include <string>
@@ -32,74 +58,40 @@
 
 #include <thread>
 
-//DO NOT DO "using namespace GGPO", it's bad practice and will bring in the using namespace std bit so if you do that you deserve to be miserable
+#include <cstdint>
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace GGPO //I like using namespace std, but ik other ppl don't so this will limit its spread just don't do using namespace GGPO
-{
-    using namespace std; // >O<
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-if you want to run GGPO4ALL in debug mode simple define or release with a console define this
-
-#define GGPO_USING_CONSOLE 
-
-before including GGPO4ALL anywhere in your code
-*/
-
-/*
-This is for logging settings, adjust as you wish but buyer beware, doing any changes here could break everything so your choice
-*/
-
-#ifdef GGPO_USING_CONSOLE
-    #define GGPO_LOG LogAndPrint
-#else
-    #define GGPO_LOG Log
-#endif
-
-constexpr uint32_t MAX_NUMBER_OF_LOGS = 1024;
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Utility Functions/Structs
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace GGPO //used for pretty logging for windows consoles, requires GGPO_USING_CONSOLE to be defined since release builds should not be opening console
-{
-    #if (defined(_WIN32) || defined(_WIN64)) && defined(GGPO_USING_CONSOLE) //this needs to be called at least once at the start of the program to enable ANSI colour codes on windows consoles
+// Platform-Specific Includes
+#if defined(_WIN32) || defined(_WIN64)
 
     #define NOMINMAX
-    #define WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN //avoid winsock and other conflicts
 
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
     #include <windows.h>
+    #include <timeapi.h> //apparently i need this idk where i took it out but i did tho lmfao
 
-    static bool
-        EnableColors()
-        {
-            DWORD f_ConsoleMode;
-            HANDLE f_OutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
 
-            if (GetConsoleMode(f_OutputHandle, &f_ConsoleMode))
-            {
-                SetConsoleMode(f_OutputHandle, f_ConsoleMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-                return true;
-            }
-            else
-            {
-                cout << ("Was not able to set console mode to allow windows to display ANSI escape codes") << "\n";
-                return false;
-            }
-        }
+#elif defined(__linux__) || defined(__APPLE__)
 
-    #endif
-}//namespace GGPO
+    #include <time.h>
+    #include <stdarg.h>
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+    #include <stdlib.h>
+    #include <errno.h>
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#else
+
+    #error Unsupported platform!
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////////////////// RingBuffer /////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace GGPO {
 
@@ -292,7 +284,33 @@ namespace GGPO {
     };
 } // namespace GGPO
 
+///////////////////////////////////////////////////////////////////////////////////////////// Logger /////////////////////////////////////////////////////////////////////////////////////////////
+
 namespace GGPO {
+
+    constexpr uint32_t MAX_NUMBER_OF_LOGS = 1024;
+
+#if (defined(_WIN32) || defined(_WIN64)) && defined(GGPO_USING_CONSOLE) //this needs to be called at least once at the start of the program to enable ANSI colour codes on windows consoles for pretty logging
+
+    inline bool
+        EnableColors()
+    {
+        DWORD f_ConsoleMode;
+        HANDLE f_OutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+
+        if (GetConsoleMode(f_OutputHandle, &f_ConsoleMode))
+        {
+            SetConsoleMode(f_OutputHandle, f_ConsoleMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+            return true;
+        }
+        else
+        {
+            cout << ("Was not able to set console mode to allow windows to display ANSI escape codes") << "\n";
+            return false;
+        }
+    }
+
+#endif
 
     enum class Colours : int
     {
@@ -403,180 +421,365 @@ namespace GGPO {
 
     class Logger
     {
-    //////////////////////////////////////////////
-    // Private Destructor
-    //////////////////////////////////////////////
-    private:
-        ~Logger()
+        //////////////////////////////////////////////
+        // Public Destructor
+        //////////////////////////////////////////////
+    public:
+        ~Logger() ///XXX: Just copy and pasted the flushalllogs method because they have the assert at the beginning and wont work with premature exit
         {
-            pm_LogSnapshotBuffer.reset();
+            for (auto& _f : pm_LogFiles)
+            {
+                if (_f.second.is_open())
+                {
+                    _f.second.flush();
+                }
+            }  // Ensure all logs are flushed before destruction
+
+            CloseOpenLogFiles(); //Closes any files that are open to prevent introducing vulnerabilities in privileged environments
         }
 
-    //////////////////////////////////////////////
-    // Public Constructor
-    //////////////////////////////////////////////
+        //////////////////////////////////////////////
+        // Public Constructor
+        //////////////////////////////////////////////
     public:
         Logger() = default;
-        Logger(const Logger&) = delete;
-        Logger& operator=(const Logger&) = delete;
 
-    ////////////////////////////////////////////////
-    // Helper Enum For LogLevel Specification
-    ////////////////////////////////////////////////
+        ////////////////////////////////////////////////
+        // Helper Enum For LogLevel Specification
+        ////////////////////////////////////////////////
     public:
         enum LogLevel : uint8_t
         {
-            Trace = 1 << 0,
-            Debug = 1 << 1,
-            Info = 1 << 2,
-            Warning = 1 << 3,
-            Error = 1 << 4,
-            Fatal = 1 << 5,
-            All = Trace | Debug | Info | Warning | Error | Fatal
+            TRACE_LOG = 1 << 0,
+            DEBUG_LOG = 1 << 1,
+            INFO_LOG = 1 << 2,
+            WARNING_LOG = 1 << 3,
+            ERROR_LOG = 1 << 4,
+            FATAL_LOG = 1 << 5,
+            ALL_LOGS = TRACE_LOG | DEBUG_LOG | INFO_LOG | WARNING_LOG | ERROR_LOG | FATAL_LOG
         };
 
-    //////////////////////////////////////////////
-    // Protected Class Members
-    //////////////////////////////////////////////
+        //////////////////////////////////////////////
+        // Protected Class Members
+        //////////////////////////////////////////////
     protected:
         bool pm_HasBeenInitialized = false;
 
-        unique_ptr<RingBuffer<LogMessage, MAX_NUMBER_OF_LOGS>> pm_LogSnapshotBuffer = nullptr;
+        map<string, ofstream> pm_LogFiles;
 
         string pm_LoggerName = "No_Logger_Name";
+        string pm_CurrentWorkingDirectory = "nothing";
 
         thread::id pm_ThreadOwnerID;
 
-        uint8_t pm_ActiveLogMask = LogLevel::All;
+        uint8_t pm_ActiveLogMask = LogLevel::ALL_LOGS;
+        LogLevel pm_FlushMask = static_cast<LogLevel>(LogLevel::ERROR_LOG | LogLevel::FATAL_LOG); // or make this user-configurable
 
-    //////////////////////////////////////////////
-    // Public Methods
-    //////////////////////////////////////////////
+        uint32_t pm_LogSizeCounter = 0;
+
+        //////////////////////////////////////////////
+        // Public Methods
+        //////////////////////////////////////////////
     public:
         bool
             Initialize
             (
+                const string& fp_DesiredOutputDirectory,
                 const string& fp_DesiredLoggerName,
-                const uint8_t fp_LogLevelFlags
+                const uint8_t fp_LogLevelFlags,
+                const bool fp_ShouldCreateOutputDirectory = true
             )
         {
             if (pm_HasBeenInitialized) //stops accidental reinitialization of logmanager
             {
-                PrintError("Logger has already been initialized, Logger is only allowed to initialize once per run");
+                PrintError(format("Logger with name : '{}' has already been initialized, Logger is only allowed to initialize once", pm_LoggerName)); //can use logger name since it was already initialized uwu
                 return false;
             }
 
-            pm_LogSnapshotBuffer = make_unique<RingBuffer<LogMessage, MAX_NUMBER_OF_LOGS>>();
-            pm_ActiveLogMask = fp_LogLevelFlags;
             pm_LoggerName = fp_DesiredLoggerName;
+
             pm_ThreadOwnerID = this_thread::get_id();
+
+            pm_CurrentWorkingDirectory = fp_DesiredOutputDirectory + "/" + pm_LoggerName;
+
+            pm_ActiveLogMask = fp_LogLevelFlags;
+
+            // Ensure log directory exists
+            if ((not filesystem::exists(pm_CurrentWorkingDirectory)) and fp_ShouldCreateOutputDirectory)
+            {
+                try
+                {
+                    filesystem::create_directories(pm_CurrentWorkingDirectory); //XXX: this can throw so we wrap it in a try catch
+                }
+                catch (const exception& f_Exception)
+                {
+                    PrintError(format("Failed to create desired log output directory with exception: '{}'", f_Exception.what()));
+                    return false;
+                }
+            }
+            else if (not filesystem::exists(pm_CurrentWorkingDirectory))
+            {
+                PrintError("Failed to find valid log output directory");
+                return false;
+            }
+
+            //Create Log files based off of log level flags
+            const map<uint8_t, string> f_LogLevels =
+            {
+                {TRACE_LOG, "trace"},
+                {DEBUG_LOG, "debug"},
+                {INFO_LOG, "info"},
+                {WARNING_LOG, "warn"},
+                {ERROR_LOG, "error"},
+                {FATAL_LOG, "fatal"}
+            };
+
+            for (const auto& [__key, __val] : f_LogLevels)
+            {
+                if (pm_ActiveLogMask & __key)
+                {
+                    CreateLogFile(pm_CurrentWorkingDirectory, __val + ".log");
+                }
+            }
 
             pm_HasBeenInitialized = true; //well if everything went as planned we should be good to set this to true uwu
 
             return true;
         }
 
-        //////////////////// Get Last Error ////////////////////
-
         void
-            GetLastError()
+            UpdateThreadOwner()
         {
-            for (int lv_Index = 0; lv_Index < pm_LogSnapshotBuffer->CurrentSize(); lv_Index++)
-            {
-                //XXX:TODO find last error here uwu >w<
-            }
+            pm_ThreadOwnerID = this_thread::get_id();
         }
 
-        //////////////////// Logging Functions  ////////////////////
+        //////////////////// Flush All Logs ////////////////////
 
         void
-            Log
-            (
-                const string& fp_Message,
-                const string& fp_Sender,
-                const uint8_t fp_LogLevel
-            )
+            FlushAllLogs()
         {
-            //return early without logging if loglevel isnt active or hasnt been initialized or if accessed from the wrong thread
-            #ifdef GGPO_DEBUG
-                if (not (pm_ActiveLogMask & fp_LogLevel or pm_HasBeenInitialized or AssertThreadAccess("Log"))) return;
-            #else
-                if (not (pm_ActiveLogMask & fp_LogLevel or pm_HasBeenInitialized)) return;
-            #endif
-
-            string f_LogLevel;
-
-            switch (fp_LogLevel)
+#ifdef GGPO_DEBUG
+            if (not AssertThreadAccess("FlushAllLogs"))
             {
-            case LogLevel::Trace:
-                f_LogLevel = "trace";
-                break;
-            case LogLevel::Debug:
-                f_LogLevel = "debug";
-                break;
-            case LogLevel::Info:
-                f_LogLevel = "info";
-                break;
-            case LogLevel::Warning:
-                f_LogLevel = "warn";
-                break;
-            case LogLevel::Error:
-                f_LogLevel = "error"; //not bright oooo soo dark and moody and complex and hard to reach and engage with ><
-                break;
-            case LogLevel::Fatal:
-                f_LogLevel = "fatal";
-                break;
-            default:
-                PrintError(Log("Did not input a valid option for log level in Log()", pm_LoggerName, "error", fp_LogLevel));
-                Print(Log(fp_Message, fp_Sender, "error", fp_LogLevel));
                 return;
             }
+#endif
 
-            string f_TimeStamp = GetCurrentTimestamp();
-            string f_LogEntry = "[" + f_TimeStamp + "]" + "[" + f_LogLevel + "]" + "[" + fp_Sender + "]: " + fp_Message + "\n";
+            for (auto& _f : pm_LogFiles)
+            {
+                if (_f.second.is_open())
+                {
+                    _f.second.flush();
+                }
+            }
+        }
 
-            pm_LogSnapshotBuffer->ForceEmplace(f_LogEntry, fp_LogLevel); //XXX: adds log to ring buffer in a destructive manner if it wraps around
+        bool
+            ValidateLogMsg(const uint8_t fp_LogLevel)
+        {
+            //return early without logging if loglevel isnt active or hasnt been initialized or if accessed from the wrong thread
+#ifdef GGPO_DEBUG
+            return(pm_ActiveLogMask & fp_LogLevel) and pm_HasBeenInitialized and AssertThreadAccess("Log");
+#else
+            return (pm_ActiveLogMask & fp_LogLevel);
+#endif
         }
 
         void
-            LogAndPrint
+            Trace
             (
                 const string& fp_Message,
-                const string& fp_Sender,
-                const uint8_t fp_LogLevel
+                const string& fp_Sender
             )
         {
-            //return early without logging if loglevel isnt active or hasnt been initialized or if accessed from the wrong thread
-            #ifdef GGPO_DEBUG
-                if (not (pm_ActiveLogMask & fp_LogLevel or pm_HasBeenInitialized or AssertThreadAccess("Log"))) return;
-            #else
-                if (not (pm_ActiveLogMask & fp_LogLevel or pm_HasBeenInitialized)) return;
-            #endif
-
-            switch(fp_LogLevel)
+            if (ValidateLogMsg(LogLevel::TRACE_LOG))
             {
-                case LogLevel::Trace:
-                    Print(Log(fp_Message, fp_Sender, "trace", fp_LogLevel), Colours::BrightWhite);
-                    break;
-                case LogLevel::Debug:
-                    Print(Log(fp_Message, fp_Sender, "debug", fp_LogLevel), Colours::BrightBlue);
-                    break;
-                case LogLevel::Info:
-                    Print(Log(fp_Message, fp_Sender, "info", fp_LogLevel), Colours::BrightGreen);
-                    break;
-                case LogLevel::Warning:
-                    Print(Log(fp_Message, fp_Sender, "warn", fp_LogLevel), Colours::BrightYellow);
-                    break;
-                case LogLevel::Error:
-                    PrintError(Log(fp_Message, fp_Sender, "error", fp_LogLevel), Colours::Red); //not bright oooo soo dark and moody and complex and hard to reach and engage with ><
-                    break;
-                case LogLevel::Fatal:
-                    PrintError(Log(fp_Message, fp_Sender, "fatal", fp_LogLevel), Colours::BrightMagenta);
-                    break;
-                default:
-                    PrintError(Log("Did not input a valid option for log level in LogAndPrint()", "Logger", "error", fp_LogLevel));
-                    Print(Log(fp_Message, fp_Sender, "error", fp_LogLevel));
-                
+                const string f_TimeStamp = GetCurrentTimestamp();
+                const string f_LogEntry = "[" + f_TimeStamp + "][trace][" + fp_Sender + "]: " + fp_Message;
+
+                // Log to specific file and all-logs file
+                const string f_LogFileName = "trace.log";
+
+                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                {
+                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
+                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
+                    //pm_LogSizeCounter++;
+
+                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
+                    //{
+                    //    pm_LogFiles[f_LogFileName].flush();
+                    //}
+                }
+
+#ifdef GGPO_USING_CONSOLE
+                Print(f_LogEntry, Colours::BrightWhite);
+#endif
+            }
+        }
+
+        void
+            Debug
+            (
+                const string& fp_Message,
+                const string& fp_Sender
+            )
+        {
+            if (ValidateLogMsg(LogLevel::DEBUG_LOG))
+            {
+                const string f_TimeStamp = GetCurrentTimestamp();
+                const string f_LogEntry = "[" + f_TimeStamp + "][Debug][" + fp_Sender + "]: " + fp_Message;
+
+                // Log to specific file and all-logs file
+                const string f_LogFileName = "debug.log";
+
+                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                {
+                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
+                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
+                    //pm_LogSizeCounter++;
+
+                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
+                    //{
+                    //    pm_LogFiles[f_LogFileName].flush();
+                    //}
+                }
+
+#ifdef GGPO_USING_CONSOLE
+                Print(f_LogEntry, Colours::BrightBlue);
+#endif
+            }
+        }
+
+        void
+            Info
+            (
+                const string& fp_Message,
+                const string& fp_Sender
+            )
+        {
+            if (ValidateLogMsg(LogLevel::INFO_LOG))
+            {
+                const string f_TimeStamp = GetCurrentTimestamp();
+                const string f_LogEntry = "[" + f_TimeStamp + "][Info][" + fp_Sender + "]: " + fp_Message;
+
+                // Log to specific file and all-logs file
+                const string f_LogFileName = "info.log";
+
+                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                {
+                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
+                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
+                    //pm_LogSizeCounter++;
+
+                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
+                    //{
+                    //    pm_LogFiles[f_LogFileName].flush();
+                    //}
+                }
+
+#ifdef GGPO_USING_CONSOLE
+                Print(f_LogEntry, Colours::BrightGreen);
+#endif
+            }
+        }
+
+        void
+            Warning
+            (
+                const string& fp_Message,
+                const string& fp_Sender
+            )
+        {
+            if (ValidateLogMsg(LogLevel::WARNING_LOG))
+            {
+                const string f_TimeStamp = GetCurrentTimestamp();
+                const string f_LogEntry = "[" + f_TimeStamp + "][Warning][" + fp_Sender + "]: " + fp_Message;
+
+                // Log to specific file and all-logs file
+                const string f_LogFileName = "warning.log";
+
+                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                {
+                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
+                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
+                    //pm_LogSizeCounter++;
+
+                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
+                    //{
+                    //    pm_LogFiles[f_LogFileName].flush();
+                    //}
+                }
+
+#ifdef GGPO_USING_CONSOLE
+                Print(f_LogEntry, Colours::BrightYellow);
+#endif
+            }
+        }
+
+        void
+            Error
+            (
+                const string& fp_Message,
+                const string& fp_Sender
+            )
+        {
+            if (ValidateLogMsg(LogLevel::ERROR_LOG))
+            {
+                const string f_TimeStamp = GetCurrentTimestamp();
+                const string f_LogEntry = "[" + f_TimeStamp + "][Error][" + fp_Sender + "]: " + fp_Message;
+
+                // Log to specific file and all-logs file
+                const string f_LogFileName = "error.log";
+
+                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                {
+                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
+                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
+                    //pm_LogSizeCounter++;
+
+                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
+                    //{
+                    //    pm_LogFiles[f_LogFileName].flush();
+                    //}
+                }
+
+#ifdef GGPO_USING_CONSOLE
+                PrintError(f_LogEntry, Colours::Red);
+#endif
+            }
+        }
+
+        void
+            Fatal
+            (
+                const string& fp_Message,
+                const string& fp_Sender
+            )
+        {
+            if (ValidateLogMsg(LogLevel::FATAL_LOG))
+            {
+                const string f_TimeStamp = GetCurrentTimestamp();
+                const string f_LogEntry = "[" + f_TimeStamp + "][Fatal][" + fp_Sender + "]: " + fp_Message;
+
+                // Log to specific file and all-logs file
+                const string f_LogFileName = "fatal.log";
+
+                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                {
+                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
+                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
+                    //pm_LogSizeCounter++;
+
+                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
+                    //{
+                    //    pm_LogFiles[f_LogFileName].flush();
+                    //}
+                }
+
+#ifdef GGPO_USING_CONSOLE
+                PrintError(f_LogEntry, Colours::Magenta);
+#endif
             }
         }
 
@@ -584,72 +787,88 @@ namespace GGPO {
     // Protected Methods
     //////////////////////////////////////////////
     protected:
-        //////////////////// Protected Logging Function  ////////////////////
-        //XXX: this is protected since it's supposed to be only called from LogAndPrint()
-        string
-            Log
+        //////////////////// Utility Functions  ////////////////////
+
+        void
+            CreateLogFile
             (
-                const string& fp_Message,
-                const string& fp_Sender,
-                const string& fp_LogLevel,
-                const uint8_t fp_IntLevel
+                const string& fp_FilePath,
+                const string& fp_FileName
             )
         {
-            const string f_TimeStamp = GetCurrentTimestamp();
-            const string f_LogEntry = "[" + f_TimeStamp + "]" + "[" + fp_LogLevel + "]" + "[" + fp_Sender + "]: " + fp_Message;
+            ofstream f_LogFile;
 
-            pm_LogSnapshotBuffer->ForceEmplace(f_LogEntry, fp_IntLevel); //XXX: adds log to ring buffer in a destructive manner if it wraps around
+            f_LogFile.open(fp_FilePath + "/" + fp_FileName, ios::out | ios::app);
 
-            return f_LogEntry;
+            if (not f_LogFile.is_open())
+            {
+                PrintError(format("Failed to open log file: '{}'", fp_FileName));
+            }
+            else
+            {
+                pm_LogFiles[fp_FileName] = move(f_LogFile);
+            }
         }
 
-        inline string //thank you chat-gpt uwu
+        [[nodiscard]] inline string //thank you chat-gpt uwu
             GetCurrentTimestamp()
             const noexcept
         {
-            auto now = chrono::system_clock::now();
+            const auto now = chrono::system_clock::now();
             auto time_t_now = chrono::system_clock::to_time_t(now);
 
             tm local_time{};
 
-            #if defined(_WIN32) || defined(_WIN64) //needa do this since localtime() isnt threadsafe uwu
-                localtime_s(&local_time, &time_t_now);
-            #else
-                localtime_r(&time_t_now, &local_time);
-            #endif
+#if defined(_WIN32) || defined(_WIN64) //needa do this since localtime() isnt threadsafe uwu
+            localtime_s(&local_time, &time_t_now);
+#else
+            localtime_r(&time_t_now, &local_time);
+#endif
 
             stringstream ss;
             ss << put_time(&local_time, "%Y-%m-%d %H:%M:%S");
 
-            auto since_epoch = now.time_since_epoch();
-            auto milliseconds = chrono::duration_cast<chrono::milliseconds>(since_epoch).count() % 1000;
+            const auto since_epoch = now.time_since_epoch();
+            const auto milliseconds = chrono::duration_cast<chrono::milliseconds>(since_epoch).count() % 1000;
 
             ss << '.' << setfill('0') << setw(3) << milliseconds;
 
             return ss.str();
         }
 
-        #ifdef GGPO_DEBUG
-            inline bool ///XXX: used for testing, this method should never call exit() for a production release, since all logging is hidden away from the game engine dev
-                AssertThreadAccess(const string& fp_FunctionName) //we don't require a lock since this method guarantees only one thread is operating on any data within the LogManager instance
-                const
+        void
+            CloseOpenLogFiles()
+        {
+            for (auto& _f : pm_LogFiles)
             {
-                if (this_thread::get_id() == pm_ThreadOwnerID)
+                if (_f.second.is_open())
                 {
-                    return true;
+                    _f.second.close();
                 }
-
-                stringstream f_UckCPlusPlus; //XXX: cpp is a dumb fucking language sometimes holy please make good features and not dumbass nonsense holy shit
-                f_UckCPlusPlus << this_thread::get_id();
-                string f_CallerThreadID = f_UckCPlusPlus.str();
-
-                PrintError(format("Logger name: '{}' called method '{}' from the wrong thread, [Caller Thread ID]: {}", pm_LoggerName, fp_FunctionName, f_CallerThreadID));
-
-                return false;
             }
-        #endif
+        }
+
+#ifdef GGPO_DEBUG
+        [[nodiscard]] inline bool ///XXX: used for testing, this method should never call exit() for a production release, since all logging is hidden away from the game engine dev
+            AssertThreadAccess(const string& fp_FunctionName) //we don't require a lock since this method guarantees only one thread is operating on any data within the Logger instance
+            const
+        {
+            if (this_thread::get_id() == pm_ThreadOwnerID)
+            {
+                return true;
+            }
+
+            stringstream f_UckCPlusPlus; //XXX: cpp is a dumb fucking language sometimes holy please make good features and not dumbass nonsense holy shit
+            f_UckCPlusPlus << this_thread::get_id();
+            string f_CallerThreadID = f_UckCPlusPlus.str();
+
+            PrintError(format("Logger name: '{}' called method '{}' from the wrong thread, [Caller Thread ID]: {}", pm_LoggerName, fp_FunctionName, f_CallerThreadID));
+
+            return false;
+        }
+#endif
     };
-} //gonna implement namespace after i compile ig ill add that to the TODO
+} //gonna implement namespace after i compile ig ill add that to the TODO -- when the fuck did i write this lmfao
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Socket Macro Defintions
@@ -658,36 +877,28 @@ namespace GGPO {
 namespace GGPO
 {
 #if defined(_WIN32) || defined(_WIN64)
-#include <winsock2.h>
-#include <ws2tcpip.h>
 
-    typedef SOCKET GGPO_SOCKET;
-#define GGPO_INVALID_SOCKET (SOCKET)(~0)
+    using GGPO_SOCKET = SOCKET;
 
-#define GGPO_GET_LAST_ERROR() WSAGetLastError()
-#define GGPO_NETWORK_ERROR_CODE DWORD
+    #define GGPO_INVALID_SOCKET (SOCKET)(~0)
 
-#define GGPO_CLOSE_SOCKET(__arg) closesocket(__arg)
-#define GGPO_SOCKET_ERROR_CODE WSAEWOULDBLOCK
+    #define GGPO_GET_LAST_ERROR() WSAGetLastError()
+    #define GGPO_NETWORK_ERROR_CODE DWORD
+
+    #define GGPO_CLOSE_SOCKET(__arg) closesocket(__arg)
+    #define GGPO_SOCKET_ERROR_CODE WSAEWOULDBLOCK
+
 #else
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
+    using GGPO_SOCKET = uint64_t;
 
+    #define GGPO_INVALID_SOCKET (-1)
 
-    typedef uint64_t GGPO_SOCKET;
-#define GGPO_INVALID_SOCKET (-1)
+    #define GGPO_GET_LAST_ERROR() errno
+    #define GGPO_NETWORK_ERROR_CODE uint32_t
 
-#define GGPO_GET_LAST_ERROR() errno
-#define GGPO_NETWORK_ERROR_CODE uint32_t
-
-#define GGPO_CLOSE_SOCKET(__arg) close(__arg)
-#define GGPO_SOCKET_ERROR_CODE EWOULDBLOCK
+    #define GGPO_CLOSE_SOCKET(__arg) close(__arg)
+    #define GGPO_SOCKET_ERROR_CODE EWOULDBLOCK
 
 #endif
 
@@ -715,7 +926,7 @@ namespace GGPO
         // setsockopt(f_Socket, SOL_SOCKET, SO_DONTLINGER, (const char*)&optval, sizeof optval);
 
         // non-blocking...
-        #if defined(_WIN32)
+        #if defined(_WIN32) || defined(_WIN64)
             u_long iMode = 1;
             ioctlsocket(f_Socket, FIONBIO, &iMode);
         #else
@@ -732,7 +943,7 @@ namespace GGPO
 
             if (bind(f_Socket, (sockaddr*)&f_SocketIn, sizeof f_SocketIn) != GGPO_SOCKET_ERROR)
             {
-                logger->GGPO_LOG(format("Udp bound to port: {}.", port), "udp.cpp", Logger::LogLevel::Info);
+                logger->Info(format("Udp bound to port: {}.", port), "udp.cpp");
                 return f_Socket;
             }
         }
@@ -1019,10 +1230,10 @@ namespace GGPO
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace GGPO{
+namespace GGPO {
 
 #ifndef GGPO_MAX_INT
-#  define GGPO_MAX_INT          0xEFFFFFF
+#  define GGPO_MAX_INT   18446744073709551615 //largest value for a unsigned 64 bit int
 #endif
 
 #ifndef GGPO_MAX
@@ -1033,91 +1244,136 @@ namespace GGPO{
 #  define GGPO_MIN(x, y)        (((x) < (y)) ? (x) : (y))
 #endif
 
-#define GGPO_ASSERT(x)                                           
-     //do {                                                     
-     //   if (!(x)) {                                           
-     //      //char assert_buf[1024];                             
-     //      snprintf(assert_buf, sizeof(assert_buf) - 1, "Assertion: %s @ %s:%d (pid:%d)", #x, __FILE__, __LINE__, Platform::GetProcessID()); \
-       //      //Logger::GGPO_LOGGER().LogAndPrint(to_string(assert_buf), "", "");                           
-       //      Platform::AssertFailed(assert_buf);                
-       //      exit(0);                                           
-       //   }                                                     
-       //} while (false)
+#ifdef GGPO_DEBUG
+
+    #define GGPO_ASSERT(fp_Expr) \
+        do { \
+            if (not (fp_Expr)) \
+            { \
+                GGPO::Platform::AssertFailed(__FILE__, __LINE__, #fp_Expr, GGPO::Platform::GetProcessID()); \
+            } \
+        } while (not 69)
+
+#else
+
+    #define GGPO_ASSERT(fp_Expr) 
+
+#endif
 
 #define GGPO_ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
 
-// Platform-Specific Includes
+}
+
+namespace GGPO::Platform{
+
+    using ProcessID =
+    #if defined(_WIN32) || defined(_WIN64)
+        DWORD;
+    #else
+        pid_t;
+    #endif
+
+    inline ProcessID 
+        GetProcessID() 
+    {
+    #if defined(_WIN32) || defined(_WIN64)
+        return GetCurrentProcessId();
+    #else
+        return getpid();
+    #endif
+    }
+
+    inline void 
+        AssertFailed
+        (
+            const char* fp_FileName, 
+            int fp_LineNumber, 
+            const char* fp_FailedExpr,
+            ProcessID fp_ProcessID
+        ) 
+    {
+        ostringstream f_AssertMsg;
+
+        f_AssertMsg 
+            << "Assertion failed: " << fp_FailedExpr << "\n"
+            << "File: " << fp_FileName << "\n"
+            << "Line: " << fp_LineNumber << "\n"
+            << "Process ID: " << fp_ProcessID << "\n";
+
+        string message = f_AssertMsg.str();
+
+#if defined(_WIN32) || defined(_WIN64)
+        MessageBoxA(nullptr, message.c_str(), "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+#else
+        cerr << message << endl;
+        // Optional: trigger debugger
+        raise(SIGTRAP); // or: __builtin_trap();
+#endif
+
+        exit(EXIT_FAILURE);
+    }
+
+// Other stuff im not sure about
 #if defined(_WIN32) || defined(_WIN64)
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <windows.h>
-#include <stdio.h>
-
-#include <cstdint>
-
-#include <timeapi.h> //apparently i need this idk where i took it out but i did tho lmfao
-
-    class Platform
+    static uint32_t GetCurrentTimeMS()
     {
-    public:  // types
-        typedef DWORD ProcessID;
+        return timeGetTime();
+    }
 
-    public:  // functions
-        static ProcessID GetProcessID()
+    inline int
+        GetConfigInt(const char* name)
+    {
+        char buf[1024];
+
+        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
         {
-            return GetCurrentProcessId();
+            return 0;
         }
 
-        static void AssertFailed(char* msg)
+        return atoi(buf);
+    }
+
+    inline bool
+        GetConfigBool(const char* name)
+    {
+        char buf[1024];
+
+        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
         {
-            MessageBoxA(NULL, msg, "GGPO Assertion Failed", MB_OK | MB_ICONEXCLAMATION);
+            return false;
         }
 
-        static uint32_t GetCurrentTimeMS()
-        {
-            return timeGetTime();
-        }
-
-        static int GetConfigInt(const char* name);
-        static bool GetConfigBool(const char* name);
-    };
+        return atoi(buf) != 0 || _stricmp(buf, "true") == 0;
+    }
+    
 
 #elif defined(__linux__) or defined(__APPLE__)
 
-#include <time.h>
-#include <cstdint>
+    struct timespec start = { 0 };
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdlib.h>
-
-    class Platform
+    static uint32_t
+        GetCurrentTimeMS()
     {
-    public:  // types
-        typedef pid_t ProcessID;
-
-    public:  // functions
-        static ProcessID GetProcessID()
+        if (start.tv_sec == 0 && start.tv_nsec == 0)
         {
-            return getpid();
+            clock_gettime(CLOCK_MONOTONIC, &start);
+            return 0;
         }
 
-        static void AssertFailed(const char* msg) {} //idek ill figure out whether i like the MessageBoxA thing from windows i feel like regular assert is fine but whatever
-        static uint32_t GetCurrentTimeMS();
-    };
+        struct timespec current;
+
+        clock_gettime(CLOCK_MONOTONIC, &current);
+
+        return ((current.tv_sec - start.tv_sec) * 1000) +
+            ((current.tv_nsec - start.tv_nsec) / 1000000); //WEIRD: THIS HAD A TRAILING + AND IDK Y WTF remember dayt ........... oh yeah i wrote this while i was so fucking baked at the cottage w the boyz
+    }
 
 #else
 
 #error Unsupported platform!
 
-#endif
+#endif //Posix OS Check //Windows OS Check
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1126,8 +1382,7 @@ namespace GGPO{
 
 namespace GGPO
 {
-
-#define GGPO_BITVECTOR_NIBBLE_SIZE 8
+    constexpr const int GGPO_BITVECTOR_NIBBLE_SIZE = 8;
 
     void
         BitVector_SetBit(uint8_t* vector, int* offset)
@@ -1181,62 +1436,6 @@ namespace GGPO
 
         return nibblet;
     }
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace GGPO
-{
-#if defined(_WIN32) || defined(_WIN64)
-
-    int
-        Platform::GetConfigInt(const char* name)
-    {
-        char buf[1024];
-
-        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
-        {
-            return 0;
-        }
-
-        return atoi(buf);
-    }
-
-    bool
-        Platform::GetConfigBool(const char* name)
-    {
-        char buf[1024];
-
-        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
-        {
-            return false;
-        }
-
-        return atoi(buf) != 0 || _stricmp(buf, "true") == 0;
-    }
-
-#elif defined(__linux__) || defined(__APPLE__)
-
-    struct timespec start = { 0 };
-
-    uint32_t
-        Platform::GetCurrentTimeMS()
-    {
-        if (start.tv_sec == 0 && start.tv_nsec == 0)
-        {
-            clock_gettime(CLOCK_MONOTONIC, &start);
-            return 0;
-        }
-
-        struct timespec current;
-
-        clock_gettime(CLOCK_MONOTONIC, &current);
-
-        return ((current.tv_sec - start.tv_sec) * 1000) +
-            ((current.tv_nsec - start.tv_nsec) / 1000000); //WEIRD: THIS HAD A TRAILING + AND IDK Y WTF remember dayt
-    }
-
-#endif //Unix OS Check //Windows OS Check
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1365,15 +1564,15 @@ namespace GGPO
         {
             if (not bitsonly and frame != other.frame)
             {
-                logger->GGPO_LOG(format("frames don't match: {}, {}", frame, other.frame), "game_input.cpp", Logger::LogLevel::Info);
+                logger->Info(format("frames don't match: {}, {}", frame, other.frame), "game_input.cpp");
             }
             if (size != other.size)
             {
-                logger->GGPO_LOG(format("sizes don't match: {}, {}", size, other.size), "game_input.cpp", Logger::LogLevel::Info);
+                logger->Info(format("sizes don't match: {}, {}", size, other.size), "game_input.cpp");
             }
             if (memcmp(bits, other.bits, size))
             {
-                logger->GGPO_LOG("bits don't match", "game_input.cpp", Logger::LogLevel::Info);
+                logger->Info("bits don't match", "game_input.cpp");
             }
 
             GGPO_ASSERT(size and other.size);
@@ -1404,7 +1603,7 @@ namespace GGPO
         InputQueue(int input_size = DEFAULT_INPUT_SIZE) //???? why do it like this lmfao y not just do it inside the constructor body lol
         {
             input_queue_logger = make_unique<Logger>();
-            input_queue_logger->Initialize("InputQueueLogger", Logger::LogLevel::All);
+            input_queue_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "InputQueueLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
             
             Init(-1, input_size);
         };
@@ -1443,7 +1642,7 @@ namespace GGPO
         int
             GetLastConfirmedFrame()
         {
-            input_queue_logger->GGPO_LOG(format("returning last confirmed frame {}.", _last_added_frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("returning last confirmed frame {}.", _last_added_frame), "input_queue.cpp");
             return _last_added_frame;
         }
 
@@ -1475,7 +1674,7 @@ namespace GGPO
         {
             GGPO_ASSERT(_first_incorrect_frame == GameInput::NullFrame || frame <= _first_incorrect_frame);
 
-            input_queue_logger->GGPO_LOG(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("resetting all prediction errors back to frame {}.", frame), "input_queue.cpp");
 
             /*
              * There's nothing really to do other than reset our prediction
@@ -1499,7 +1698,7 @@ namespace GGPO
                 frame = GGPO_MIN(frame, _last_frame_requested);
             }
 
-            input_queue_logger->GGPO_LOG(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("discarding confirmed frames up to {} (last_added:{} length:{} [head:{} tail:{}]).", frame, _last_added_frame, _length, _head, _tail), "input_queue.cpp");
 
             if (frame >= _last_added_frame)
             {
@@ -1509,14 +1708,14 @@ namespace GGPO
             {
                 int offset = frame - _inputs[_tail].frame + 1;
 
-                input_queue_logger->GGPO_LOG(format("difference of {} frames.", offset), "input_queue.cpp", Logger::LogLevel::Info);
+                input_queue_logger->Info(format("difference of {} frames.", offset), "input_queue.cpp");
                 GGPO_ASSERT(offset >= 0);
 
                 _tail = (_tail + offset) % INPUT_QUEUE_LENGTH;
                 _length -= offset;
             }
 
-            input_queue_logger->GGPO_LOG(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("after discarding, new tail is {} (frame:{}).", _tail, _inputs[_tail].frame), "input_queue.cpp");
             GGPO_ASSERT(_length >= 0);
         }
 
@@ -1548,7 +1747,7 @@ namespace GGPO
                 GameInput* input
             )
         {
-            input_queue_logger->GGPO_LOG(format("requesting input frame {}.", requested_frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("requesting input frame {}.", requested_frame), "input_queue.cpp");
 
             /*
             * No one should ever try to grab any input when we have a prediction
@@ -1578,7 +1777,7 @@ namespace GGPO
                     offset = (offset + _tail) % INPUT_QUEUE_LENGTH;
                     GGPO_ASSERT(_inputs[offset].frame == requested_frame);
                     *input = _inputs[offset];
-                    input_queue_logger->GGPO_LOG(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->Info(format("returning confirmed frame number {}.", input->frame), "input_queue.cpp");
                     return true;
                 }
 
@@ -1589,17 +1788,17 @@ namespace GGPO
                 */
                 if (requested_frame == 0)
                 {
-                    input_queue_logger->GGPO_LOG("basing new prediction frame from nothing, you're client wants frame 0.", "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->Info("basing new prediction frame from nothing, you're client wants frame 0.", "input_queue.cpp");
                     _prediction.erase();
                 }
                 else if (_last_added_frame == GameInput::NullFrame)
                 {
-                    input_queue_logger->GGPO_LOG("basing new prediction frame from nothing, since we have no frames yet.", "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->Info("basing new prediction frame from nothing, since we have no frames yet.", "input_queue.cpp");
                     _prediction.erase();
                 }
                 else
                 {
-                    input_queue_logger->GGPO_LOG(format("basing new prediction frame from previously added frame (queue entry:{}, frame:{}).", PREVIOUS_FRAME(_head), _inputs[PREVIOUS_FRAME(_head)].frame), "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->Info(format("basing new prediction frame from previously added frame (queue entry:{}, frame:{}).", PREVIOUS_FRAME(_head), _inputs[PREVIOUS_FRAME(_head)].frame), "input_queue.cpp");
                     _prediction = _inputs[PREVIOUS_FRAME(_head)];
                 }
                 _prediction.frame++;
@@ -1614,7 +1813,7 @@ namespace GGPO
             */
             *input = _prediction;
             input->frame = requested_frame;
-            input_queue_logger->GGPO_LOG(format("returning prediction frame number {} ({}).", input->frame, _prediction.frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("returning prediction frame number {} ({}).", input->frame, _prediction.frame), "input_queue.cpp");
 
             return false;
         }
@@ -1624,7 +1823,7 @@ namespace GGPO
         {
             int new_frame;
 
-            input_queue_logger->GGPO_LOG(format("adding input frame number {} to queue.", input.frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("adding input frame number {} to queue.", input.frame), "input_queue.cpp");
 
             /*
             * These next two lines simply verify that inputs are passed in
@@ -1658,7 +1857,7 @@ namespace GGPO
         int
             AdvanceQueueHead(int frame)
         {
-            input_queue_logger->GGPO_LOG(format("advancing queue head to frame {}.", frame), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("advancing queue head to frame {}.", frame), "input_queue.cpp");
 
             int expected_frame = _first_frame ? 0 : _inputs[PREVIOUS_FRAME(_head)].frame + 1;
 
@@ -1671,7 +1870,7 @@ namespace GGPO
                 * time we shoved a frame into the system.  In this case, there's
                 * no room on the queue.  Toss it.
                 */
-                input_queue_logger->GGPO_LOG(format("Dropping input frame {} (expected next frame to be {}).", frame, expected_frame), "input_queue.cpp", Logger::LogLevel::Info);
+                input_queue_logger->Info(format("Dropping input frame {} (expected next frame to be {}).", frame, expected_frame), "input_queue.cpp");
                 return GameInput::NullFrame;
             }
 
@@ -1683,7 +1882,7 @@ namespace GGPO
                 * last frame in the queue several times in order to fill the space
                 * left.
                 */
-                input_queue_logger->GGPO_LOG(format("Adding padding frame {} to account for change in frame delay.", expected_frame), "input_queue.cpp", Logger::LogLevel::Info);
+                input_queue_logger->Info(format("Adding padding frame {} to account for change in frame delay.", expected_frame), "input_queue.cpp");
                 GameInput& last_frame = _inputs[PREVIOUS_FRAME(_head)];
                 AddDelayedInputToQueue(last_frame, expected_frame);
                 expected_frame++;
@@ -1696,7 +1895,7 @@ namespace GGPO
         void
             AddDelayedInputToQueue(GameInput& input, int frame_number)
         {
-            input_queue_logger->GGPO_LOG(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
+            input_queue_logger->Info(format("adding delayed input frame number {} to queue.", frame_number), "input_queue.cpp");
 
             GGPO_ASSERT(input.size == _prediction.size);
 
@@ -1727,7 +1926,7 @@ namespace GGPO
                 */
                 if (_first_incorrect_frame == GameInput::NullFrame and not _prediction.equal(input, true))
                 {
-                    input_queue_logger->GGPO_LOG(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->Info(format("frame {} does not match prediction.  marking error.", frame_number), "input_queue.cpp");
                     _first_incorrect_frame = frame_number;
                 }
 
@@ -1739,7 +1938,7 @@ namespace GGPO
                 */
                 if (_prediction.frame == _last_frame_requested and _first_incorrect_frame == GameInput::NullFrame)
                 {
-                    input_queue_logger->GGPO_LOG("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp", Logger::LogLevel::Info);
+                    input_queue_logger->Info("prediction is correct!  dumping out of prediction mode.", "input_queue.cpp");
                     _prediction.frame = GameInput::NullFrame;
                 }
                 else
@@ -1846,7 +2045,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
               // sleep for.
               int sleep_frames = (int)(((radvantage - advantage) / 2) + 0.5);
 
-              logger->GGPO_LOG(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp", Logger::LogLevel::Info);
+              logger->Info(format("iteration {}:  sleep frames is {}", count, sleep_frames), "timesync.cpp");
 
               // Some things just aren't worth correcting for.  Make sure
               // the difference is relevant before proceeding.
@@ -1865,7 +2064,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
                   {
                       if (not _last_inputs[i].equal(_last_inputs[0], true))
                       {
-                          logger->GGPO_LOG(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp", Logger::LogLevel::Info);
+                          logger->Info(format("iteration {}:  rejecting due to input stuff at position {}...!!!", count, i), "timesync.cpp");
                           return 0;
                       }
                   }
@@ -1922,7 +2121,7 @@ namespace GGPO
              _input_queues(NULL)
          {
             sync_logger = make_unique<Logger>();
-            sync_logger->Initialize("SyncLogger", Logger::LogLevel::All);
+            sync_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "SyncLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
 
              _framecount = 0;
              _last_confirmed_frame = -1;
@@ -1978,7 +2177,7 @@ namespace GGPO
 
              if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames)
              {
-                 sync_logger->GGPO_LOG("Rejecting input from emulator: reached prediction barrier.", "sync.cpp", Logger::LogLevel::Info);
+                 sync_logger->Info("Rejecting input from emulator: reached prediction barrier.", "sync.cpp");
                  return false;
              }
 
@@ -1987,7 +2186,7 @@ namespace GGPO
                  SaveCurrentFrame();
              }
 
-             sync_logger->GGPO_LOG(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp", Logger::LogLevel::Info);
+             sync_logger->Info(format("Sending undelayed local frame {} to queue {}.", _framecount, queue), "sync.cpp");
 
              input.frame = _framecount;
              _input_queues[queue].AddInput(input);
@@ -2104,7 +2303,7 @@ namespace GGPO
              //// find the frame in question
              //if (frame == _framecount)
              //{
-             //    sync_logger->GGPO_LOG("Skipping NOP.", "sync.cpp", Logger::LogLevel::Info);
+             //    sync_logger->Info("Skipping NOP.", "sync.cpp");
              //    return;
              //}
 
@@ -2112,7 +2311,7 @@ namespace GGPO
              //_savedstate.head = FindSavedFrameIndex(frame);
              //SavedFrame* state = _savedstate.frames + _savedstate.head;
 
-             //sync_logger->GGPO_LOG(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
+             //sync_logger->Info(format("=== Loading frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp");
 
              //GGPO_ASSERT(state->buf and state->cbuf);
 
@@ -2136,7 +2335,7 @@ namespace GGPO
              //state->frame = _framecount;
              //_callbacks.save_game_state(state->buf, &state->frame, &state->checksum, state->frame);
 
-             //sync_logger->GGPO_LOG(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp", Logger::LogLevel::Info);
+             //sync_logger->Info(format("=== Saved frame info {} (checksum: {}).", state->frame, state->checksum), "sync.cpp");
              //_savedstate.head = (_savedstate.head + 1) % GGPO_ARRAY_SIZE(_savedstate.frames);
          }
 
@@ -2440,7 +2639,7 @@ namespace GGPO
          Udp()
          {
              udp_logger = make_unique<Logger>();
-             udp_logger->Initialize("UDPLogger", Logger::LogLevel::All);
+             udp_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "UDPLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
          }
 
          void
@@ -2451,7 +2650,7 @@ namespace GGPO
              _poll = poll;
              _poll->RegisterLoop(this);
 
-             udp_logger->GGPO_LOG(format("binding udp socket to port {}.", port), "udp.cpp", Logger::LogLevel::Info);
+             udp_logger->Info(format("binding udp socket to port {}.", port), "udp.cpp");
              _socket = CreateSocket(port, 0, udp_logger.get());
          }
 
@@ -2472,13 +2671,13 @@ namespace GGPO
              if (res == GGPO_SOCKET_ERROR)
              {
                  GGPO_NETWORK_ERROR_CODE err = GGPO_GET_LAST_ERROR();
-                 udp_logger->GGPO_LOG(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp", Logger::LogLevel::Error);
+                 udp_logger->Error(format("unknown error in sendto (erro: {}  wsaerr: {}).", res, err), "udp.cpp");
                  GGPO_ASSERT(FALSE && "Unknown error in sendto");
              }
 
              char dst_ip[1024];
 
-             udp_logger->GGPO_LOG(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, GGPO_ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp", Logger::LogLevel::Error);
+             udp_logger->Error(format("sent packet length {} to {}:{} (ret:{}).", len, inet_ntop(AF_INET, (void*)&to->sin_addr, dst_ip, GGPO_ARRAY_SIZE(dst_ip)), ntohs(to->sin_port), res), "udp.cpp");
          }
 
          virtual bool
@@ -2501,7 +2700,7 @@ namespace GGPO
 
                      if (error != GGPO_SOCKET_ERROR_CODE)
                      {
-                         udp_logger->GGPO_LOG(format("recvfrom GGPO_GET_LAST_ERROR returned {} ({}).", error, error), "udp.cpp", Logger::LogLevel::Error);
+                         udp_logger->Error(format("recvfrom GGPO_GET_LAST_ERROR returned {} ({}).", error, error), "udp.cpp");
                      }
 
                      break;
@@ -2509,7 +2708,7 @@ namespace GGPO
                  else if (len > 0)
                  {
                      char src_ip[1024];
-                     udp_logger->GGPO_LOG(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, GGPO_ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp", Logger::LogLevel::Error);
+                     udp_logger->Error(format("recvfrom returned (len:{}  from:{}:{}).", len, inet_ntop(AF_INET, (void*)&recv_addr.sin_addr, src_ip, GGPO_ARRAY_SIZE(src_ip)), ntohs(recv_addr.sin_port)), "udp.cpp");
                      UdpMsg* msg = (UdpMsg*)recv_buf;
                      _callbacks->OnMsg(recv_addr, msg, len);
                  }
@@ -2630,7 +2829,7 @@ namespace GGPO
                 next_interval = (_state.sync.roundtrips_remaining == NUM_SYNC_PACKETS) ? SYNC_FIRST_RETRY_INTERVAL : SYNC_RETRY_INTERVAL;
                 if (_last_send_time and _last_send_time + next_interval < now)
                 {
-                    udp_protocol_logger->GGPO_LOG(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info(format("No luck syncing after {} ms... Re-queueing sync packet.", next_interval), "udp_proto.cpp");
                     SendSyncRequest();
                 }
                 break;
@@ -2639,7 +2838,7 @@ namespace GGPO
                 // xxx: rig all this up with a timer wrapper
                 if (not _state.running.last_input_packet_recv_time or _state.running.last_input_packet_recv_time + RUNNING_RETRY_INTERVAL < now)
                 {
-                    udp_protocol_logger->GGPO_LOG(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info(format("Haven't exchanged packets in a while (last received:{}  last sent:{}).  Resending.", _last_received_input.frame, _last_sent_input.frame), "udp_proto.cpp");
                     SendPendingOutput();
                     _state.running.last_input_packet_recv_time = now;
                 }
@@ -2661,7 +2860,7 @@ namespace GGPO
 
                 if (_last_send_time and _last_send_time + KEEP_ALIVE_INTERVAL < now)
                 {
-                    udp_protocol_logger->GGPO_LOG("Sending keep alive packet", "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info("Sending keep alive packet", "udp_proto.cpp");
                     SendMsg(new UdpMsg(UdpMsg::KeepAlive));
                 }
 
@@ -2673,7 +2872,7 @@ namespace GGPO
                         (_last_recv_time + _disconnect_notify_start < now)
                         )
                 {
-                    udp_protocol_logger->GGPO_LOG(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info(format("Endpoint has stopped receiving packets for {} ms.  Sending notification.", _disconnect_notify_start), "udp_proto.cpp");
                     Event e(Event::NetworkInterrupted);
                     e.u.network_interrupted.disconnect_timeout = _disconnect_timeout - _disconnect_notify_start;
                     QueueEvent(e);
@@ -2684,7 +2883,7 @@ namespace GGPO
                 {
                     if (not _disconnect_event_sent)
                     {
-                        udp_protocol_logger->GGPO_LOG(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->Info(format("Endpoint has stopped receiving packets for {} ms.  Disconnecting.", _disconnect_timeout), "udp_proto.cpp");
                         QueueEvent(Event(Event::Disconnected));
                         _disconnect_event_sent = true;
                     }
@@ -2694,7 +2893,7 @@ namespace GGPO
             case Disconnected:
                 if (_shutdown_timeout < now)
                 {
-                    udp_protocol_logger->GGPO_LOG("Shutting down udp connection.", "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info("Shutting down udp connection.", "udp_proto.cpp");
                     _udp = NULL;
                     _shutdown_timeout = 0;
                 }
@@ -2877,7 +3076,7 @@ namespace GGPO
                 // Log("checking sequence number -> next - seq : %d - %d = %d\n", seq, _next_recv_seq, skipped);
                 if (skipped > MAX_SEQ_DISTANCE)
                 {
-                    udp_protocol_logger->GGPO_LOG(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info(format("dropping out of order packet (seq: {}, last seq:{})", seq, _next_recv_seq), "udp_proto.cpp");
                     return;
                 }
             }
@@ -3029,7 +3228,7 @@ namespace GGPO
 
             _kbps_sent = int(Bps / 1024);
 
-            udp_protocol_logger->GGPO_LOG
+            udp_protocol_logger->Info
             (
                 format
                 (
@@ -3040,8 +3239,7 @@ namespace GGPO
                     total_bytes_sent / 1024.0,
                     udp_overhead
                 ),
-                "udp_proto.cpp",
-                Logger::LogLevel::Info
+                "udp_proto.cpp"
             );
         }
 
@@ -3072,31 +3270,31 @@ namespace GGPO
             switch (msg->hdr.type)
             {
             case UdpMsg::SyncRequest:
-                udp_protocol_logger->GGPO_LOG(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} sync-request ({}).", prefix, msg->u.sync_request.random_request), "udp_proto.cpp");
                 break;
 
             case UdpMsg::SyncReply:
-                udp_protocol_logger->GGPO_LOG(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} sync-reply ({}).", prefix, msg->u.sync_reply.random_reply), "udp_proto.cpp");
                 break;
 
             case UdpMsg::QualityReport:
-                udp_protocol_logger->GGPO_LOG(format("{} quality report.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} quality report.", prefix), "udp_proto.cpp");
                 break;
 
             case UdpMsg::QualityReply:
-                udp_protocol_logger->GGPO_LOG(format("{} quality reply.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} quality reply.", prefix), "udp_proto.cpp");
                 break;
 
             case UdpMsg::KeepAlive:
-                udp_protocol_logger->GGPO_LOG(format("{} keep alive.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} keep alive.", prefix), "udp_proto.cpp");
                 break;
 
             case UdpMsg::Input:
-                udp_protocol_logger->GGPO_LOG(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} game-compressed-input {} (+ {} bits).", prefix, msg->u.input.start_frame, msg->u.input.num_bits), "udp_proto.cpp");
                 break;
 
             case UdpMsg::InputAck:
-                udp_protocol_logger->GGPO_LOG(format("{} input ack.", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} input ack.", prefix), "udp_proto.cpp");
                 break;
 
             default:
@@ -3114,7 +3312,7 @@ namespace GGPO
             switch (evt.type)
             {
             case UdpProtocol::Event::Synchronzied:
-                udp_protocol_logger->GGPO_LOG(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("{} (event: Synchronzied).", prefix), "udp_proto.cpp");
                 break;
             }
         }
@@ -3168,7 +3366,7 @@ namespace GGPO
 
                     if (entry.msg) //check for a nullptr dereference
                     {
-                        udp_protocol_logger->GGPO_LOG(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->Info(format("creating rogue oop (seq: {}  delay: {})", entry.msg->hdr.sequence_number, delay), "udp_proto.cpp");
                     }
                     else
                     {
@@ -3192,7 +3390,7 @@ namespace GGPO
             }
             if (_oo_packet.msg and _oo_packet.send_time < Platform::GetCurrentTimeMS())
             {
-                udp_protocol_logger->GGPO_LOG("sending rogue oop!", "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info("sending rogue oop!", "udp_proto.cpp");
 
                 _udp->SendTo((char*)_oo_packet.msg, _oo_packet.msg->PacketSize(), 0, (struct sockaddr*)&_oo_packet.dest_addr, sizeof _oo_packet.dest_addr);
 
@@ -3280,7 +3478,7 @@ namespace GGPO
         {
             if (_remote_magic_number != 0 and msg->hdr.magic != _remote_magic_number)
             {
-                udp_protocol_logger->GGPO_LOG(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp", Logger::LogLevel::Error);
+                udp_protocol_logger->Error(format("Ignoring sync request from unknown endpoint ({} != {}).", msg->hdr.magic, _remote_magic_number), "udp_proto.cpp");
                 return false;
             }
 
@@ -3296,13 +3494,13 @@ namespace GGPO
         {
             if (_current_state != Syncing)
             {
-                udp_protocol_logger->GGPO_LOG("Ignoring SyncReply while not synching.", "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info("Ignoring SyncReply while not synching.", "udp_proto.cpp");
                 return msg->hdr.magic == _remote_magic_number;
             }
 
             if (msg->u.sync_reply.random_reply != _state.sync.random)
             {
-                udp_protocol_logger->GGPO_LOG(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("sync reply {} != {}.  Keep looking...", msg->u.sync_reply.random_reply, _state.sync.random), "udp_proto.cpp");
                 return false;
             }
 
@@ -3312,11 +3510,11 @@ namespace GGPO
                 _connected = true;
             }
 
-            udp_protocol_logger->GGPO_LOG(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp", Logger::LogLevel::Info);
+            udp_protocol_logger->Info(format("Checking sync state ({} round trips remaining).", _state.sync.roundtrips_remaining), "udp_proto.cpp");
 
             if (--_state.sync.roundtrips_remaining == 0)
             {
-                udp_protocol_logger->GGPO_LOG("Synchronized!", "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info("Synchronized!", "udp_proto.cpp");
                 QueueEvent(UdpProtocol::Event(UdpProtocol::Event::Synchronzied));
                 _current_state = Running;
                 _last_received_input.frame = -1;
@@ -3346,7 +3544,7 @@ namespace GGPO
             {
                 if (_current_state != Disconnected and not _disconnect_event_sent)
                 {
-                    udp_protocol_logger->GGPO_LOG("Disconnecting endpoint on remote request.", "udp_proto.cpp", Logger::LogLevel::Info);
+                    udp_protocol_logger->Info("Disconnecting endpoint on remote request.", "udp_proto.cpp");
                     QueueEvent(Event(Event::Disconnected));
                     _disconnect_event_sent = true;
                 }
@@ -3438,13 +3636,13 @@ namespace GGPO
 
                         _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
 
-                        udp_protocol_logger->GGPO_LOG(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->Info(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp");
                         QueueEvent(evt);
 
                     }
                     else
                     {
-                        udp_protocol_logger->GGPO_LOG(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                        udp_protocol_logger->Info(format("Skipping past frame:({}) current is {}.", currentFrame, _last_received_input.frame), "udp_proto.cpp");
                     }
 
                     /*
@@ -3461,7 +3659,7 @@ namespace GGPO
              */
             while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input.ack_frame)
             {
-                udp_protocol_logger->GGPO_LOG(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp");
                 _last_acked_input = _pending_output.Front();
                 _pending_output.Pop();
             }
@@ -3476,7 +3674,7 @@ namespace GGPO
              */
             while (_pending_output.CurrentSize() and _pending_output.Front().frame < msg->u.input_ack.ack_frame)
             {
-                udp_protocol_logger->GGPO_LOG(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp", Logger::LogLevel::Info);
+                udp_protocol_logger->Info(format("Throwing away pending output frame {}", _pending_output.Front().frame), "udp_proto.cpp");
                 _last_acked_input = _pending_output.Front();
                 _pending_output.Pop();
             }
@@ -3740,7 +3938,7 @@ namespace GGPO
              _sync(NULL)
          {
             sync_test_backend_logger = make_unique<Logger>();
-            sync_test_backend_logger->Initialize("SyncTestBackendLogger", Logger::LogLevel::All);
+            sync_test_backend_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "SyncTestBackendLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
 
              _num_players = num_players;
              _check_distance = frames;
@@ -3850,7 +4048,7 @@ namespace GGPO
              _sync.IncrementFrame();
              _current_input.erase();
 
-             sync_test_backend_logger->GGPO_LOG(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp", Logger::LogLevel::Info);
+             sync_test_backend_logger->Info(format("End of frame({})...", _sync.GetFrameCount()), "synctest.cpp");
 
              if (_rollingback)
              {
@@ -3889,8 +4087,8 @@ namespace GGPO
 
                      if (info.frame != _sync.GetFrameCount()) //REPLACE THIS WITH AN IMMEDIATE END SESSION CALL INSTEAD OF CRASHING THE ENTIRE PROGRAM LMFAO
                      {
-                         sync_test_backend_logger->GGPO_LOG(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp", Logger::LogLevel::Error);
-                         sync_test_backend_logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
+                         sync_test_backend_logger->Error(format("Frame number {} does not match saved frame number {}", info.frame, frame), "synctest.cpp");
+                         sync_test_backend_logger->Error(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp");
                          exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                      }
 
@@ -3898,12 +4096,12 @@ namespace GGPO
 
                      if (info.checksum != checksum)
                      {
-                         sync_test_backend_logger->GGPO_LOG(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp", Logger::LogLevel::Error);
-                         sync_test_backend_logger->GGPO_LOG(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp", Logger::LogLevel::Error);
+                         sync_test_backend_logger->Error(format("Checksum for frame {} does not match saved ({} != {})", frame, checksum, info.checksum), "synctest.cpp");
+                         sync_test_backend_logger->Error(format("Program will now exit with error: {}", ErrorToString(ErrorCode::FATAL_DESYNC)), "synctest.cpp");
                          exit(static_cast<int>(ErrorCode::FATAL_DESYNC)); //RAISESYNC ERRROR WAS HERE
                      }
 
-                     sync_test_backend_logger->GGPO_LOG(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp", Logger::LogLevel::Info);
+                     sync_test_backend_logger->Info(format("Checksum {} for frame {} matches.", checksum, info.frame), "synctest.cpp");
                  }
 
                  _last_verified = frame;
@@ -3925,9 +4123,9 @@ namespace GGPO
          void
              LogSaveStates(SavedInfo& info)
          {
-             sync_test_backend_logger->GGPO_LOG(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp", Logger::LogLevel::Info);
+             sync_test_backend_logger->Info(format("state-{}-original and {}", _sync.GetFrameCount(), info.buf), "synctest.cpp");
 
-             sync_test_backend_logger->GGPO_LOG(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp", Logger::LogLevel::Info);
+             sync_test_backend_logger->Info(format("state-{}-replay and {}", _sync.GetFrameCount(), _sync.GetLastSavedFrame().buf), "synctest.cpp");
          }
 
      protected:
@@ -3975,7 +4173,7 @@ namespace GGPO
             _next_input_to_send(0)
         {
             spectator_backend_logger = make_unique<Logger>();
-            spectator_backend_logger->Initialize("SpectatorBackendLogger", Logger::LogLevel::All);
+            spectator_backend_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "SpectatorBackendLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
 
             _synchronizing = true;
 
@@ -4058,7 +4256,7 @@ namespace GGPO
           virtual ErrorCode
               IncrementFrame(void)
           {
-              spectator_backend_logger->GGPO_LOG(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp", Logger::LogLevel::Info);
+              spectator_backend_logger->Info(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp");
               DoPoll(0);
               PollUdpProtocolEvents();
 
@@ -4366,7 +4564,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               _next_spectator_frame(0)
           {
             p2p_backend_logger = make_unique<Logger>();
-            p2p_backend_logger->Initialize("Peer2PeerBackendLogger", Logger::LogLevel::All);
+            p2p_backend_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "Peer2PeerBackendLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
 
               _synchronizing = true;
               _next_recommended_sleep = 0;
@@ -4396,7 +4594,6 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               /*
                * Preload the ROM
                */
-               //_callbacks.begin_game(gamename); //THIS IS DEPRECATED APPARENTLY SO IDK WHAT ITS DOIN HERE
           }
 
           virtual ~Peer2PeerBackend()
@@ -4438,7 +4635,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           total_min_confirmed = PollNPlayers(current_frame);
                       }
 
-                      p2p_backend_logger->GGPO_LOG(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                      p2p_backend_logger->Info(format("last confirmed frame in p2p backend is {}.", total_min_confirmed), "p2p.cpp");
 
                       if (total_min_confirmed >= 0)
                       {
@@ -4448,7 +4645,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                           {
                               while (_next_spectator_frame <= total_min_confirmed)
                               {
-                                  p2p_backend_logger->GGPO_LOG(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp", Logger::LogLevel::Info);
+                                  p2p_backend_logger->Info(format("pushing frame {} to spectators.", _next_spectator_frame), "p2p.cpp");
 
                                   GameInput input;
                                   input.frame = _next_spectator_frame;
@@ -4463,7 +4660,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                                   _next_spectator_frame++;
                               }
                           }
-                          p2p_backend_logger->GGPO_LOG(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->Info(format("setting confirmed frame in sync to {}.", total_min_confirmed), "p2p.cpp");
 
                           _sync.SetLastConfirmedFrame(total_min_confirmed);
                       }
@@ -4562,7 +4759,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                  // confirmed local frame for this player.  this must come first so it
                  // gets incorporated into the next packet we send.
 
-                  p2p_backend_logger->GGPO_LOG(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("setting local connect status for local queue {} to {}", queue, input.frame), "p2p.cpp");
                   _local_connect_status[queue].last_frame = input.frame;
 
                   // Send the input to all the remote players.
@@ -4606,7 +4803,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           virtual ErrorCode
               IncrementFrame(void)
           {
-              p2p_backend_logger->GGPO_LOG(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp", Logger::LogLevel::Info);
+              p2p_backend_logger->Info(format("End of frame ({})...", _sync.GetFrameCount()), "p2p.cpp");
               _sync.IncrementFrame();
               DoPoll(0);
               PollSyncEvents();
@@ -4642,7 +4839,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   int current_frame = _sync.GetFrameCount();
                   // xxx: we should be tracking who the local player is, but for now assume
                   // that if the endpoint is not initalized, this must be the local player.
-                  p2p_backend_logger->GGPO_LOG(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("Disconnecting local player {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp");
                   for (int i = 0; i < _num_players; i++)
                   {
                       if (_endpoints[i].IsInitialized())
@@ -4653,7 +4850,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               }
               else
               {
-                  p2p_backend_logger->GGPO_LOG(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("Disconnecting queue {} at frame {} by user request.", queue, _local_connect_status[queue].last_frame), "p2p.cpp");
                   DisconnectPlayerQueue(queue, _local_connect_status[queue].last_frame);
               }
               return ErrorCode::OK;
@@ -4772,16 +4969,16 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
               _endpoints[queue].Disconnect();
 
-              p2p_backend_logger->GGPO_LOG(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp", Logger::LogLevel::Info);
+              p2p_backend_logger->Info(format("Changing queue {} local connect status for last frame from {} to {} on disconnect request (current: {}).", queue, _local_connect_status[queue].last_frame, syncto, framecount), "p2p.cpp");
 
               _local_connect_status[queue].disconnected = 1;
               _local_connect_status[queue].last_frame = syncto;
 
               if (syncto < framecount)
               {
-                  p2p_backend_logger->GGPO_LOG(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("adjusting simulation to account for the fact that {} disconnected @ {}.", queue, syncto), "p2p.cpp");
                   _sync.AdjustSimulation(syncto);
-                  p2p_backend_logger->GGPO_LOG("finished adjusting simulation.", "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info("finished adjusting simulation.", "p2p.cpp");
               }
 
               info.code = EventCode::DisconnectedFromPeer;
@@ -4877,15 +5074,15 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       total_min_confirmed = GGPO_MIN(_local_connect_status[i].last_frame, total_min_confirmed);
                   }
 
-                  p2p_backend_logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("  local endp: connected = {}, last_received = {}, total_min_confirmed = {}.", not _local_connect_status[i].disconnected, _local_connect_status[i].last_frame, total_min_confirmed), "p2p.cpp");
 
                   if (not queue_connected && not _local_connect_status[i].disconnected)
                   {
-                      p2p_backend_logger->GGPO_LOG(format("disconnecting i {} by remote request.", i), "p2p.cpp", Logger::LogLevel::Info);
+                      p2p_backend_logger->Info(format("disconnecting i {} by remote request.", i), "p2p.cpp");
                       DisconnectPlayerQueue(i, total_min_confirmed);
                   }
 
-                  p2p_backend_logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp");
               }
 
               return total_min_confirmed;
@@ -4904,7 +5101,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   bool queue_connected = true;
                   int queue_min_confirmed = GGPO_MAX_INT;
 
-                  p2p_backend_logger->GGPO_LOG(format("considering queue {}.", queue), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("considering queue {}.", queue), "p2p.cpp");
 
                   for (i = 0; i < _num_players; i++)
                   {
@@ -4917,11 +5114,11 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                           queue_connected = queue_connected && connected;
                           queue_min_confirmed = GGPO_MIN(last_received, queue_min_confirmed);
-                          p2p_backend_logger->GGPO_LOG(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->Info(format("  endpoint {}: connected = {}, last_received = {}, queue_min_confirmed = {}.", i, connected, last_received, queue_min_confirmed), "p2p.cpp");
                       }
                       else
                       {
-                          p2p_backend_logger->GGPO_LOG(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->Info(format("  endpoint {}: ignoring... not running.", i), "p2p.cpp");
                       }
                   }
                   // merge in our local status only if we're still connected!
@@ -4930,7 +5127,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       queue_min_confirmed = GGPO_MIN(_local_connect_status[queue].last_frame, queue_min_confirmed);
                   }
 
-                  p2p_backend_logger->GGPO_LOG(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("  local endp: connected = {}, last_received = {}, queue_min_confirmed = {}.", not _local_connect_status[queue].disconnected, _local_connect_status[queue].last_frame, queue_min_confirmed), "p2p.cpp");
 
                   if (queue_connected)
                   {
@@ -4943,12 +5140,12 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                       // and later receive a disconnect notification for frame n-1.
                       if (not _local_connect_status[queue].disconnected or _local_connect_status[queue].last_frame > queue_min_confirmed)
                       {
-                          p2p_backend_logger->GGPO_LOG(format("disconnecting queue {} by remote request.", queue), "p2p.cpp", Logger::LogLevel::Info);
+                          p2p_backend_logger->Info(format("disconnecting queue {} by remote request.", queue), "p2p.cpp");
                           DisconnectPlayerQueue(queue, queue_min_confirmed);
                       }
                   }
 
-                  p2p_backend_logger->GGPO_LOG(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp", Logger::LogLevel::Info);
+                  p2p_backend_logger->Info(format("  total_min_confirmed = {}.", total_min_confirmed), "p2p.cpp");
               }
               return total_min_confirmed;
           }
@@ -5063,7 +5260,7 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
                       _sync.AddRemoteInput(queue, evt.u.input.input);
                       // Notify the other endpoints which frame we received from a peer
-                      p2p_backend_logger->GGPO_LOG(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp", Logger::LogLevel::Info);
+                      p2p_backend_logger->Info(format("setting remote connect status for queue {} to {}", queue, evt.u.input.input.frame), "p2p.cpp");
                       _local_connect_status[queue].last_frame = evt.u.input.input.frame;
                   }
                   break;

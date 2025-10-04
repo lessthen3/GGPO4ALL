@@ -82,7 +82,9 @@ def run_command_with_live_output(fp_Command, fp_WorkingDirectory=".") -> None:
 
 ############# Main CMake Function #############
 
-def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
+def run_cmake(fp_BuildType: str, fp_Generator: str, fp_ProjectDir: str = ".") -> bool:
+
+    f_BuildDir = os.path.join(fp_ProjectDir, "build")
 
     f_GeneratorMap = {
         "vs2022": "Visual Studio 17 2022",
@@ -115,7 +117,13 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
     
     f_IsMultiConfig = fp_Generator in ["vs2022", "vs2019", "vs2017", "vs2015", "xcode", "ninja-mc"]
 
-    f_CMakeConfigCommand = ['cmake', '-S', '.', '-B', 'build', '-G', f_GeneratorMap[fp_Generator], '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']
+    f_CMakeConfigCommand = [
+        'cmake', 
+        '-S', fp_ProjectDir, 
+        '-B', f_BuildDir, 
+        '-G', f_GeneratorMap[fp_Generator], 
+        '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
+    ]
 
     if not f_IsMultiConfig:
 
@@ -147,7 +155,7 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
         try:
             print(CreateColouredText(f"[INFO]: Running CMake single config build for {fp_BuildType}...", "green"))
 
-            run_command_with_live_output(['cmake', '--build', 'build'])
+            run_command_with_live_output(['cmake', '--build', f_BuildDir])
 
         except subprocess.CalledProcessError as err:
             print(CreateColouredText(f"[ERROR]: CMake single config {fp_BuildType} build process failed!", "red"))
@@ -165,7 +173,7 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
         try:
             print(CreateColouredText("[INFO]: Running CMake build for Debug...", "green"))
 
-            run_command_with_live_output(['cmake', '--build', 'build', '--config', 'Debug'])
+            run_command_with_live_output(['cmake', '--build', f_BuildDir, '--config', 'Debug'])
 
         except subprocess.CalledProcessError as err:
             print(CreateColouredText("[ERROR]: CMake debug build process failed!", "red"))
@@ -181,7 +189,7 @@ def run_cmake(fp_BuildType: str, fp_Generator: str) -> bool:
         try:
             print(CreateColouredText("[INFO]: Running CMake build for Release...", "green"))
 
-            run_command_with_live_output(['cmake', '--build', 'build', '--config', 'Release'])
+            run_command_with_live_output(['cmake', '--build', f_BuildDir, '--config', 'Release'])
 
         except subprocess.CalledProcessError as err:
             print(CreateColouredText("[ERROR]: CMake release build process failed!", "red"))
@@ -247,6 +255,13 @@ def main() -> bool:
     )
 
     parser.add_argument(
+        '-D', 
+        nargs=1,
+        metavar="[path_to_project]",
+        help=CreateColouredText('Used to identify which directory CMakeLists is and set build artifact output dir', 'bright magenta')
+    )
+
+    parser.add_argument(
         '-G', 
         nargs=1,
         metavar="[generator]",
@@ -295,10 +310,17 @@ def main() -> bool:
 
     f_DesiredGenerator = args.G[0].lower() #convert to all lower case for easier handling
 
+    ############# Check for -D flag #############
+
+    f_ProjectDirectory = './'
+
+    if(args.D):
+        f_ProjectDirectory = args.D[0]
+
     ############# Check for --clean flag #############
 
     if args.clean:
-        shutil.rmtree('build', ignore_errors=True)
+        shutil.rmtree(os.path.join(f_ProjectDirectory, 'build'), ignore_errors=True)
 
     ############# Detect Platform #############
 
@@ -306,12 +328,12 @@ def main() -> bool:
 
     ############# Run Build Fingers Crossed >w< #############
 
-    if not run_cmake(f_BuildType, f_DesiredGenerator):
-            return False
+    if not run_cmake(f_BuildType, f_DesiredGenerator, f_ProjectDirectory):
+        return False
     
     ############# Report Build Stats #############
 
-    print(CreateColouredText(f"[INFO]: Final Build Summary: \n", "bright green"))
+    print(CreateColouredText("==================== Final Build Summary ====================\n", "bright green"))
     print(CreateColouredText(f"Generator: {f_DesiredGenerator}", "bright magenta"))
     print(CreateColouredText(f"Build Type: {f_BuildType}", "bright magenta"))
     print(CreateColouredText(f"Platform: {f_CurrentPlatform}\n", "bright magenta"))

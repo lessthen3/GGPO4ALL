@@ -40,6 +40,15 @@ The purpose of a library is to offer functionality to an end-user to empower the
 
 With this new design I hope it is easier to integrate GGPO4ALL into whatever project you are working on, while also giving more freedom over how the control flow of your network code works without adding much tech debt.
 
+## Building Tests
+
+To run tests simply do this in terminal:
+
+Run: __python init.py [--debug | --release | --both] -G [desired_generator] -D [path_to_project]__ in your terminal and your done!
+
+>[!TIP]
+>For the complete list of generators and commands run __python init.py [-h | --help]__
+
 ## Resources:
 
 [Documentation](https://www.youtube.com/watch?v=dQw4w9WgXcQ)

@@ -19,7 +19,7 @@
 static void
     SegFaultHandler(int fp_Signal)
 {
-    GGPO::PrintError(std::format("[!] Crash signal received: {}", fp_Signal));
+    GGPO::PrintError(std::format("[!] FATAL_SEGMENTATION_FAULT, Crash signal received: {}", fp_Signal));
     // possibly notify watchdog or dump stack trace
     exit(EXIT_FAILURE);
 }
