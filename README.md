@@ -10,6 +10,10 @@ A cross platform header only implementation of GGPO primarily meant for use with
 
 GGPO originally only supported UDP but now GGPO4ALL supports TCP and UDP!
 
+#### Dropped support for 32-bit platforms
+
+GGPO was developed when 32-bit was the predominant bus width CPUs were built around. However, these days pretty much any machine built in the last 15 years is 64-bit, so it doesn't really make sense for GGPO4ALL to support it anymore.
+
 #### Removal of callbacks
 
 GGPO4ALL functions different from the original GGPO whereas instead of setting and forgetting some obscure function pointers and just letting GGPO rip, I instead elected to just expose functionality for doing the networking directly with functions that allow end-users to implement any custom networking logic they desire.
@@ -26,7 +30,7 @@ Instead GGPO4ALL expects all data to be fed in as a byte stream of serialized (a
 
 #### Sessions
 
-GGPO4ALL uses a class object called Sessions that hold and manage state information. Each Session can be called on by multiple threads at a time, and multiple Sessions can be hosted on any number of threads. Packets are sent and received inside threadsafe queues that utilize mutexes.
+GGPO4ALL uses a class object called a Session that hold and manage state information. Each Session can be called on by multiple threads at a time, and multiple Sessions can be hosted on any number of threads.
 
 #### Takeaway 
 
@@ -38,7 +42,7 @@ Having a blackbox design like the original GGPO just obscures control flow and m
 
 The purpose of a library is to offer functionality to an end-user to empower them to accomplish whatever end goal the software they are building has.
 
-With this new design I hope it is easier to integrate GGPO4ALL into whatever project you are working on, while also giving more freedom over how the control flow of your network code works without adding much tech debt.
+With this new design I hope it is easier to integrate GGPO into whatever project you are working on, while also giving more freedom over how the control flow of your network code works without adding much tech debt.
 
 ## Building Tests
 

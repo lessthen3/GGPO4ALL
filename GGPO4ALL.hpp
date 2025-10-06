@@ -37,6 +37,8 @@ before including GGPO4ALL anywhere in your code
 
 #define GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY "./logs"
 
+#define GGPO_DEFAULT_RINGBUFFER_SIZE 64
+
 #include <format>
 #include <string>
 #include <iostream>
@@ -91,7 +93,280 @@ before including GGPO4ALL anywhere in your code
 
 #endif
 
-///////////////////////////////////////////////////////////////////////////////////////////// RingBuffer /////////////////////////////////////////////////////////////////////////////////////////////
+ //=========================================================================================== Main Types ===========================================================================================//
+
+constexpr int MAX_PLAYERS = 4;
+constexpr int MAX_PREDICTION_FRAMES = 8;
+constexpr int MAX_SPECTATORS = 32;
+
+constexpr int SPECTATOR_INPUT_INTERVAL = 4;
+
+namespace GGPO
+{
+    typedef int PlayerHandle;
+
+    enum class PlayerType : int
+    {
+        Local,
+        Remote,
+        Spectator,
+    };
+
+    /*
+     * The Player structure used to describe players in ggpo_add_player
+     *
+     * size: Should be set to the sizeof(Player)
+     *
+     * type: One of the PlayerType values describing how inputs should be handled
+     *       Local players must have their inputs updated every frame via
+     *       ggpo_add_local_inputs.  Remote players values will come over the
+     *       network.
+     *
+     * player_num: The player number.  Should be between 1 and the number of players
+     *       In the game (e.g. in a 2 player game, either 1 or 2).
+     *
+     * If type == PLAYERTYPE_REMOTE:
+     *
+     * u.remote.ip_address:  The ip address of the ggpo session which will host this
+     *       player.
+     *
+     * u.remote.port: The port where udp packets should be sent to reach this player.
+     *       All the local inputs for this session will be sent to this player at
+     *       ip_address:port.
+     *
+     */
+
+    struct Player
+    {
+        int               size;
+        PlayerType    type;
+        int               player_num;
+
+        union
+        {
+            struct
+            {
+            } local;
+            struct
+            {
+                char           ip_address[32];
+                unsigned short port;
+            } remote;
+        } u;
+    };
+
+    struct LocalEndpoint
+    {
+        int      player_num;
+    };
+
+    enum class ErrorCode : int
+    {
+        OK = 69,
+        SUCCESS = 0,
+        GENERAL_FAILURE = -1,
+        INVALID_SESSION = 1,
+        INVALID_PLAYER_HANDLE = 2,
+        PLAYER_OUT_OF_RANGE = 3,
+        PREDICTION_THRESHOLD = 4,
+        UNSUPPORTED = 5,
+        NOT_SYNCHRONIZED = 6,
+        IN_ROLLBACK = 7,
+        INPUT_DROPPED = 8,
+        PLAYER_DISCONNECTED = 9,
+        TOO_MANY_SPECTATORS = 10,
+        INVALID_REQUEST = 11,
+        FATAL_DESYNC = 12,
+        NULLPTR_PASSED_AS_VALUE
+    };
+
+
+    consteval string_view
+        ErrorToString(ErrorCode fp_ErrorCode)
+    {
+        switch (fp_ErrorCode)
+        {
+        case ErrorCode::OK: return "No error.";
+        case ErrorCode::GENERAL_FAILURE: return "General failure.";
+        case ErrorCode::INVALID_SESSION: return "Invalid session.";
+        case ErrorCode::INVALID_PLAYER_HANDLE: return "Invalid player handle.";
+        case ErrorCode::PLAYER_OUT_OF_RANGE: return "Player out of range.";
+        case ErrorCode::PREDICTION_THRESHOLD: return "Prediction threshold exceeded.";
+        case ErrorCode::UNSUPPORTED: return "Unsupported operation.";
+        case ErrorCode::NOT_SYNCHRONIZED: return "Not synchronized.";
+        case ErrorCode::IN_ROLLBACK: return "Currently in rollback.";
+        case ErrorCode::INPUT_DROPPED: return "Input was dropped.";
+        case ErrorCode::PLAYER_DISCONNECTED: return "Player disconnected.";
+        case ErrorCode::TOO_MANY_SPECTATORS: return "Too many spectators connected.";
+        case ErrorCode::INVALID_REQUEST: return "Invalid request.";
+        case ErrorCode::FATAL_DESYNC: return "Fatal desynchronization detected!";
+        default: return "Unknown  error.";
+        }
+    }
+
+    constexpr inline bool
+        Succeeded(ErrorCode fp_Result)
+        noexcept
+    {
+        return fp_Result == ErrorCode::SUCCESS;
+    }
+
+    constexpr int INVALID_HANDLE = -1;
+
+    /*
+     * The EventCode enumeration describes what type of event just happened.
+     *
+     * EVENTCODE_CONNECTED_TO_PEER - Handshake with the game running on the
+     * other side of the network has been completed.
+     *
+     * EVENTCODE_SYNCHRONIZING_WITH_PEER - Beginning the synchronization
+     * process with the client on the other end of the networking.  The count
+     * and total fields in the u.synchronizing struct of the Event
+     * object indicate progress.
+     *
+     * EVENTCODE_SYNCHRONIZED_WITH_PEER - The synchronziation with this
+     * peer has finished.
+     *
+     * EVENTCODE_RUNNING - All the clients have synchronized.  You may begin
+     * sending inputs with ggpo_synchronize_inputs.
+     *
+     * EVENTCODE_DISCONNECTED_FROM_PEER - The network connection on
+     * the other end of the network has closed.
+     *
+     * EVENTCODE_TIMESYNC - The time synchronziation code has determined
+     * that this client is too far ahead of the other one and should slow
+     * down to ensure fairness.  The u.timesync.frames_ahead parameter in
+     * the Event object indicates how many frames the client is.
+     *
+     */
+    enum class EventCode : int
+    {
+        ConnectedToPeer = 1000,
+        SynchronizingWithPeer = 1001,
+        SynchronizedWithPeer = 1002,
+        Running = 1003,
+        DisconnectedFromPeer = 1004,
+        TimeSync = 1005,
+        ConnectionInterrupted = 1006,
+        ConnectionResumed = 1007
+    };
+
+    constexpr string_view
+        EventToString(EventCode fp_EventCode)
+    {
+        switch (fp_EventCode)
+        {
+        case EventCode::ConnectedToPeer:        return "ConnectedToPeer";
+        case EventCode::SynchronizingWithPeer:  return "SynchronizingWithPeer";
+        case EventCode::SynchronizedWithPeer:  return "SynchronizedWithPeer";
+        case EventCode::Running:                   return "Running";
+        case EventCode::DisconnectedFromPeer:  return "DisconnectedFromPeer";
+        case EventCode::TimeSync:                return "TimeSync";
+        case EventCode::ConnectionInterrupted:  return "ConnectionInterrupted";
+        case EventCode::ConnectionResumed:      return "ConnectionResumed";
+        default:                                            return "UnknownEvent";
+        }
+    }
+
+    /*
+     * The Event structure contains an asynchronous event notification sent
+     * by the on_event callback.  See EventCode, above, for a detailed
+     * explanation of each event.
+     */
+    struct Event
+    {
+        Event() = default;
+
+        EventCode code;
+
+        union
+        {
+            struct
+            {
+                PlayerHandle  player;
+            }connected;
+            struct
+            {
+                PlayerHandle  player;
+                int               count;
+                int               total;
+            }synchronizing;
+            struct
+            {
+                PlayerHandle  player;
+            }synchronized;
+            struct
+            {
+                PlayerHandle  player;
+            }disconnected;
+            struct
+            {
+                int               frames_ahead;
+            }timesync;
+            struct
+            {
+                PlayerHandle  player;
+                int               disconnect_timeout;
+            }connection_interrupted;
+            struct
+            {
+                PlayerHandle  player;
+            }connection_resumed;
+        } u;
+    };
+
+    /*
+     * The NetworkStats function contains some statistics about the current
+     * session.
+     *
+     * network.send_queue_len - The length of the queue containing UDP packets
+     * which have not yet been acknowledged by the end client.  The length of
+     * the send queue is a rough indication of the quality of the connection.
+     * The longer the send queue, the higher the round-trip time between the
+     * clients.  The send queue will also be longer than usual during high
+     * packet loss situations.
+     *
+     * network.recv_queue_len - The number of inputs currently buffered by the
+     * .net network layer which have yet to be validated.  The length of
+     * the prediction queue is roughly equal to the current frame number
+     * minus the frame number of the last packet in the remote queue.
+     *
+     * network.ping - The roundtrip packet transmission time as calcuated
+     * by .net.  This will be roughly equal to the actual round trip
+     * packet transmission time + 2 the interval at which you call ggpo_idle
+     * or ggpo_advance_frame.
+     *
+     * network.kbps_sent - The estimated bandwidth used between the two
+     * clients, in kilobits per second.
+     *
+     * timesync.local_frames_behind - The number of frames .net calculates
+     * that the local client is behind the remote client at this instant in
+     * time.  For example, if at this instant the current game client is running
+     * frame 1002 and the remote game client is running frame 1009, this value
+     * will mostly likely roughly equal 7.
+     *
+     * timesync.remote_frames_behind - The same as local_frames_behind, but
+     * calculated from the perspective of the remote player.
+     *
+     */
+    struct NetworkStats
+    {
+        struct
+        {
+            int   send_queue_len;
+            int   recv_queue_len;
+            int   ping;
+            int   kbps_sent;
+        } network;
+        struct
+        {
+            int   local_frames_behind;
+            int   remote_frames_behind;
+        } timesync;
+    };
+}
+
+//=========================================================================================== RingBuffer ===========================================================================================//
 
 namespace GGPO {
 
@@ -256,6 +531,13 @@ namespace GGPO {
             pm_Data[pm_CurrentIndex++] = fp_Item;
         }
 
+        template<typename... Args>
+        constexpr void EmplaceBack(Args&&... fp_Args)
+        {
+            assert(pm_CurrentIndex < pm_MaxCapacity and "FixedPushBuffer overflowed!");
+            pm_Data[pm_CurrentIndex++] = T(forward<Args>(args)...); // Construct T using args, assign to slot
+        }
+
         [[nodiscard]] constexpr T& operator[](size_t fp_Index)
         {
             assert(fp_Index < pm_CurrentIndex);
@@ -284,7 +566,7 @@ namespace GGPO {
     };
 } // namespace GGPO
 
-///////////////////////////////////////////////////////////////////////////////////////////// Logger /////////////////////////////////////////////////////////////////////////////////////////////
+ //=========================================================================================== Logger ===========================================================================================//
 
 namespace GGPO {
 
@@ -870,9 +1152,103 @@ namespace GGPO {
     };
 } //gonna implement namespace after i compile ig ill add that to the TODO -- when the fuck did i write this lmfao
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Socket Macro Defintions
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ //=========================================================================================== Macros ===========================================================================================//
+
+namespace GGPO {
+
+#ifndef GGPO_MAX_INT
+#  define GGPO_MAX_INT   18446744073709551615 //largest value for a unsigned 64 bit int
+#endif
+
+#ifndef GGPO_MAX
+#  define GGPO_MAX(x, y)        (((x) > (y)) ? (x) : (y))
+#endif
+
+#ifndef GGPO_MIN
+#  define GGPO_MIN(x, y)        (((x) < (y)) ? (x) : (y))
+#endif
+
+#ifdef GGPO_DEBUG
+
+#define GGPO_ASSERT(fp_Expr) \
+        do { \
+            if (not (fp_Expr)) \
+            { \
+                GGPO::Platform::AssertFailed(__FILE__, __LINE__, #fp_Expr, GGPO::Platform::GetProcessID()); \
+            } \
+        } while (not 69)
+
+#else
+
+#define GGPO_ASSERT(fp_Expr) 
+
+#endif
+
+#define GGPO_ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
+
+}
+
+//=========================================================================================== BitVector Stuff ===========================================================================================//
+
+namespace GGPO
+{
+    constexpr const int GGPO_BITVECTOR_NIBBLE_SIZE = 8;
+
+    void
+        BitVector_SetBit(uint8_t* vector, int* offset)
+    {
+        vector[(*offset) / 8] |= (1 << ((*offset) % 8));
+        *offset += 1;
+    }
+
+    void
+        BitVector_ClearBit(uint8_t* vector, int* offset)
+    {
+        vector[(*offset) / 8] &= ~(1 << ((*offset) % 8));
+        *offset += 1;
+    }
+
+    void
+        BitVector_WriteNibblet(uint8_t* vector, int nibble, int* offset)
+    {
+        GGPO_ASSERT(nibble < (1 << GGPO_BITVECTOR_NIBBLE_SIZE));
+
+        for (int i = 0; i < GGPO_BITVECTOR_NIBBLE_SIZE; i++)
+        {
+            if (nibble & (1 << i))
+            {
+                BitVector_SetBit(vector, offset);
+            }
+            else
+            {
+                BitVector_ClearBit(vector, offset);
+            }
+        }
+    }
+
+    int
+        BitVector_ReadBit(uint8_t* vector, int* offset)
+    {
+        int retval = !!(vector[(*offset) / 8] & (1 << ((*offset) % 8)));
+        *offset += 1;
+        return retval;
+    }
+
+    int
+        BitVector_ReadNibblet(uint8_t* vector, int* offset)
+    {
+        int nibblet = 0;
+
+        for (int i = 0; i < GGPO_BITVECTOR_NIBBLE_SIZE; i++)
+        {
+            nibblet |= (BitVector_ReadBit(vector, offset) << i);
+        }
+
+        return nibblet;
+    }
+}
+
+//=========================================================================================== BEGINNING OF ACTUAL API ===========================================================================================//
 
 namespace GGPO
 {
@@ -902,12 +1278,12 @@ namespace GGPO
 
 #endif
 
-    constexpr auto GGPO_SOCKET_ERROR(-1);
-    constexpr auto MAX_UDP_ENDPOINTS(16);
+    constexpr auto GGPO_SOCKET_ERROR = -1;
+    constexpr auto MAX_UDP_ENDPOINTS = 16;
 
-    static const int MAX_UDP_PACKET_SIZE = 4096;
+    constexpr int MAX_UDP_PACKET_SIZE = 4096;
 
-    static GGPO_SOCKET
+    inline GGPO_SOCKET
         CreateSocket
         (
             uint16_t bind_port, 
@@ -954,315 +1330,7 @@ namespace GGPO
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-constexpr int MAX_PLAYERS = 4;
-constexpr int MAX_PREDICTION_FRAMES = 8;
-constexpr int MAX_SPECTATORS = 32;
-
-constexpr int SPECTATOR_INPUT_INTERVAL = 4;
-
-namespace GGPO
-{
-    typedef int PlayerHandle;
-
-    enum class PlayerType : int
-    {
-        Local,
-        Remote,
-        Spectator,
-    };
-
-    /*
-     * The Player structure used to describe players in ggpo_add_player
-     *
-     * size: Should be set to the sizeof(Player)
-     *
-     * type: One of the PlayerType values describing how inputs should be handled
-     *       Local players must have their inputs updated every frame via
-     *       ggpo_add_local_inputs.  Remote players values will come over the
-     *       network.
-     *
-     * player_num: The player number.  Should be between 1 and the number of players
-     *       In the game (e.g. in a 2 player game, either 1 or 2).
-     *
-     * If type == PLAYERTYPE_REMOTE:
-     *
-     * u.remote.ip_address:  The ip address of the ggpo session which will host this
-     *       player.
-     *
-     * u.remote.port: The port where udp packets should be sent to reach this player.
-     *       All the local inputs for this session will be sent to this player at
-     *       ip_address:port.
-     *
-     */
-
-    struct Player
-    {
-        int               size;
-        PlayerType    type;
-        int               player_num;
-
-        union
-        {
-            struct
-            {
-            } local;
-            struct
-            {
-                char           ip_address[32];
-                unsigned short port;
-            } remote;
-        } u;
-    };
-
-    struct LocalEndpoint
-    {
-        int      player_num;
-    };
-
-
-    enum class ErrorCode : int
-    {
-        OK = 69,
-        SUCCESS = 0,
-        GENERAL_FAILURE = -1,
-        INVALID_SESSION = 1,
-        INVALID_PLAYER_HANDLE = 2,
-        PLAYER_OUT_OF_RANGE = 3,
-        PREDICTION_THRESHOLD = 4,
-        UNSUPPORTED = 5,
-        NOT_SYNCHRONIZED = 6,
-        IN_ROLLBACK = 7,
-        INPUT_DROPPED = 8,
-        PLAYER_DISCONNECTED = 9,
-        TOO_MANY_SPECTATORS = 10,
-        INVALID_REQUEST = 11,
-        FATAL_DESYNC = 12
-    };
-
-
-    consteval string_view
-        ErrorToString(ErrorCode fp_ErrorCode)
-    {
-        switch (fp_ErrorCode)
-        {
-        case ErrorCode::OK: return "No error.";
-        case ErrorCode::GENERAL_FAILURE: return "General failure.";
-        case ErrorCode::INVALID_SESSION: return "Invalid session.";
-        case ErrorCode::INVALID_PLAYER_HANDLE: return "Invalid player handle.";
-        case ErrorCode::PLAYER_OUT_OF_RANGE: return "Player out of range.";
-        case ErrorCode::PREDICTION_THRESHOLD: return "Prediction threshold exceeded.";
-        case ErrorCode::UNSUPPORTED: return "Unsupported operation.";
-        case ErrorCode::NOT_SYNCHRONIZED: return "Not synchronized.";
-        case ErrorCode::IN_ROLLBACK: return "Currently in rollback.";
-        case ErrorCode::INPUT_DROPPED: return "Input was dropped.";
-        case ErrorCode::PLAYER_DISCONNECTED: return "Player disconnected.";
-        case ErrorCode::TOO_MANY_SPECTATORS: return "Too many spectators connected.";
-        case ErrorCode::INVALID_REQUEST: return "Invalid request.";
-        case ErrorCode::FATAL_DESYNC: return "Fatal desynchronization detected!";
-        default: return "Unknown  error.";
-        }
-    }
-
-    constexpr bool
-        Succeeded(ErrorCode fp_Result)
-        noexcept
-    {
-        return fp_Result == ErrorCode::SUCCESS;
-    }
-
-    constexpr int INVALID_HANDLE = -1;
-
-
-    /*
-     * The EventCode enumeration describes what type of event just happened.
-     *
-     * EVENTCODE_CONNECTED_TO_PEER - Handshake with the game running on the
-     * other side of the network has been completed.
-     *
-     * EVENTCODE_SYNCHRONIZING_WITH_PEER - Beginning the synchronization
-     * process with the client on the other end of the networking.  The count
-     * and total fields in the u.synchronizing struct of the Event
-     * object indicate progress.
-     *
-     * EVENTCODE_SYNCHRONIZED_WITH_PEER - The synchronziation with this
-     * peer has finished.
-     *
-     * EVENTCODE_RUNNING - All the clients have synchronized.  You may begin
-     * sending inputs with ggpo_synchronize_inputs.
-     *
-     * EVENTCODE_DISCONNECTED_FROM_PEER - The network connection on
-     * the other end of the network has closed.
-     *
-     * EVENTCODE_TIMESYNC - The time synchronziation code has determined
-     * that this client is too far ahead of the other one and should slow
-     * down to ensure fairness.  The u.timesync.frames_ahead parameter in
-     * the Event object indicates how many frames the client is.
-     *
-     */
-    enum class EventCode : int
-    {
-        ConnectedToPeer = 1000,
-        SynchronizingWithPeer = 1001,
-        SynchronizedWithPeer = 1002,
-        Running = 1003,
-        DisconnectedFromPeer = 1004,
-        TimeSync = 1005,
-        ConnectionInterrupted = 1006,
-        ConnectionResumed = 1007
-    };
-
-    consteval string_view
-        EventToString(EventCode fp_EventCode)
-    {
-        switch (fp_EventCode)
-        {
-        case EventCode::ConnectedToPeer:        return "ConnectedToPeer";
-        case EventCode::SynchronizingWithPeer:  return "SynchronizingWithPeer";
-        case EventCode::SynchronizedWithPeer:  return "SynchronizedWithPeer";
-        case EventCode::Running:                   return "Running";
-        case EventCode::DisconnectedFromPeer:  return "DisconnectedFromPeer";
-        case EventCode::TimeSync:                return "TimeSync";
-        case EventCode::ConnectionInterrupted:  return "ConnectionInterrupted";
-        case EventCode::ConnectionResumed:      return "ConnectionResumed";
-        default:                                            return "UnknownEvent";
-        }
-    }
-
-    /*
-     * The Event structure contains an asynchronous event notification sent
-     * by the on_event callback.  See EventCode, above, for a detailed
-     * explanation of each event.
-     */
-    struct Event
-    {
-        Event() = default;
-
-        EventCode code;
-
-        union
-        {
-            struct
-            {
-                PlayerHandle  player;
-            }connected;
-            struct
-            {
-                PlayerHandle  player;
-                int               count;
-                int               total;
-            }synchronizing;
-            struct
-            {
-                PlayerHandle  player;
-            }synchronized;
-            struct
-            {
-                PlayerHandle  player;
-            }disconnected;
-            struct
-            {
-                int               frames_ahead;
-            }timesync;
-            struct
-            {
-                PlayerHandle  player;
-                int               disconnect_timeout;
-            }connection_interrupted;
-            struct
-            {
-                PlayerHandle  player;
-            }connection_resumed;
-        } u;
-    };
-
-    /*
-     * The NetworkStats function contains some statistics about the current
-     * session.
-     *
-     * network.send_queue_len - The length of the queue containing UDP packets
-     * which have not yet been acknowledged by the end client.  The length of
-     * the send queue is a rough indication of the quality of the connection.
-     * The longer the send queue, the higher the round-trip time between the
-     * clients.  The send queue will also be longer than usual during high
-     * packet loss situations.
-     *
-     * network.recv_queue_len - The number of inputs currently buffered by the
-     * .net network layer which have yet to be validated.  The length of
-     * the prediction queue is roughly equal to the current frame number
-     * minus the frame number of the last packet in the remote queue.
-     *
-     * network.ping - The roundtrip packet transmission time as calcuated
-     * by .net.  This will be roughly equal to the actual round trip
-     * packet transmission time + 2 the interval at which you call ggpo_idle
-     * or ggpo_advance_frame.
-     *
-     * network.kbps_sent - The estimated bandwidth used between the two
-     * clients, in kilobits per second.
-     *
-     * timesync.local_frames_behind - The number of frames .net calculates
-     * that the local client is behind the remote client at this instant in
-     * time.  For example, if at this instant the current game client is running
-     * frame 1002 and the remote game client is running frame 1009, this value
-     * will mostly likely roughly equal 7.
-     *
-     * timesync.remote_frames_behind - The same as local_frames_behind, but
-     * calculated from the perspective of the remote player.
-     *
-     */
-    struct NetworkStats
-    {
-        struct
-        {
-            int   send_queue_len;
-            int   recv_queue_len;
-            int   ping;
-            int   kbps_sent;
-        } network;
-        struct
-        {
-            int   local_frames_behind;
-            int   remote_frames_behind;
-        } timesync;
-    };
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace GGPO {
-
-#ifndef GGPO_MAX_INT
-#  define GGPO_MAX_INT   18446744073709551615 //largest value for a unsigned 64 bit int
-#endif
-
-#ifndef GGPO_MAX
-#  define GGPO_MAX(x, y)        (((x) > (y)) ? (x) : (y))
-#endif
-
-#ifndef GGPO_MIN
-#  define GGPO_MIN(x, y)        (((x) < (y)) ? (x) : (y))
-#endif
-
-#ifdef GGPO_DEBUG
-
-    #define GGPO_ASSERT(fp_Expr) \
-        do { \
-            if (not (fp_Expr)) \
-            { \
-                GGPO::Platform::AssertFailed(__FILE__, __LINE__, #fp_Expr, GGPO::Platform::GetProcessID()); \
-            } \
-        } while (not 69)
-
-#else
-
-    #define GGPO_ASSERT(fp_Expr) 
-
-#endif
-
-#define GGPO_ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
-
-}
+//=========================================================================================== Platform Abstraction Tools ===========================================================================================//
 
 namespace GGPO::Platform{
 
@@ -1313,135 +1381,69 @@ namespace GGPO::Platform{
         exit(EXIT_FAILURE);
     }
 
+
+    // For game timers, netcode, frame delta, etc
+inline uint64_t 
+    GetMonotonicTimeMS() 
+    noexcept
+{
+#if defined(_WIN32) || defined(_WIN64)
+    return timeGetTime(); // 32-bit, wraps after ~49.7 days
+#elif defined(__linux__) || defined(__APPLE__)
+    struct timespec t{};
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return static_cast<uint64_t>(t.tv_sec) * 1000ULL + t.tv_nsec / 1000000ULL;
+#else
+    static_assert(false, "No monotonic time source available on this platform.");
+#endif
+}
+
 // Other stuff im not sure about
 #if defined(_WIN32) || defined(_WIN64)
 
-    static uint32_t GetCurrentTimeMS()
+inline optional<string>
+    GetEnvVar(const char* name)
+{
+    char buf[1024];
+
+    DWORD len = GetEnvironmentVariable(name, buf, sizeof(buf));
+
+    if (len == 0 || len >= sizeof(buf))
     {
-        return timeGetTime();
+        PrintError("BUFFER OVERFLOW WHEN TRYING TO OBTAIN ENVIRONMENT VARIABLE ON WINDOWS UWU");
+        return nullopt;
     }
 
-    inline int
-        GetConfigInt(const char* name)
+    return string(buf, len);
+}
+
+inline int
+    GetConfigInt(const char* name)
+{
+    auto val = GetEnvVar(name);
+    return val ? atoi(val->c_str()) : 0;
+}
+
+inline bool
+    GetConfigBool(const char* name)
+{
+    auto val = GetEnvVar(name);
+
+    if (not val) 
     {
-        char buf[1024];
-
-        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
-        {
-            return 0;
-        }
-
-        return atoi(buf);
+        return false;
     }
 
-    inline bool
-        GetConfigBool(const char* name)
-    {
-        char buf[1024];
-
-        if (GetEnvironmentVariable(name, buf, GGPO_ARRAY_SIZE(buf)) == 0)
-        {
-            return false;
-        }
-
-        return atoi(buf) != 0 || _stricmp(buf, "true") == 0;
-    }
+    return atoi(val->c_str()) != 0 || _stricmp(val->c_str(), "true") == 0;
+}
     
-
-#elif defined(__linux__) or defined(__APPLE__)
-
-    struct timespec start = { 0 };
-
-    static uint32_t
-        GetCurrentTimeMS()
-    {
-        if (start.tv_sec == 0 && start.tv_nsec == 0)
-        {
-            clock_gettime(CLOCK_MONOTONIC, &start);
-            return 0;
-        }
-
-        struct timespec current;
-
-        clock_gettime(CLOCK_MONOTONIC, &current);
-
-        return ((current.tv_sec - start.tv_sec) * 1000) +
-            ((current.tv_nsec - start.tv_nsec) / 1000000); //WEIRD: THIS HAD A TRAILING + AND IDK Y WTF remember dayt ........... oh yeah i wrote this while i was so fucking baked at the cottage w the boyz
-    }
-
-#else
-
-#error Unsupported platform!
-
 #endif //Posix OS Check //Windows OS Check
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Bitvector stuff idfk
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-namespace GGPO
-{
-    constexpr const int GGPO_BITVECTOR_NIBBLE_SIZE = 8;
-
-    void
-        BitVector_SetBit(uint8_t* vector, int* offset)
-    {
-        vector[(*offset) / 8] |= (1 << ((*offset) % 8));
-        *offset += 1;
-    }
-
-    void
-        BitVector_ClearBit(uint8_t* vector, int* offset)
-    {
-        vector[(*offset) / 8] &= ~(1 << ((*offset) % 8));
-        *offset += 1;
-    }
-
-    void
-        BitVector_WriteNibblet(uint8_t* vector, int nibble, int* offset)
-    {
-        GGPO_ASSERT(nibble < (1 << GGPO_BITVECTOR_NIBBLE_SIZE));
-
-        for (int i = 0; i < GGPO_BITVECTOR_NIBBLE_SIZE; i++)
-        {
-            if (nibble & (1 << i)) 
-            {
-                BitVector_SetBit(vector, offset);
-            }
-            else 
-            {
-                BitVector_ClearBit(vector, offset);
-            }
-        }
-    }
-
-    int
-        BitVector_ReadBit(uint8_t* vector, int* offset)
-    {
-        int retval = !!(vector[(*offset) / 8] & (1 << ((*offset) % 8)));
-        *offset += 1;
-        return retval;
-    }
-
-    int
-        BitVector_ReadNibblet(uint8_t* vector, int* offset)
-    {
-        int nibblet = 0;
-
-        for (int i = 0; i < GGPO_BITVECTOR_NIBBLE_SIZE; i++)
-        {
-            nibblet |= (BitVector_ReadBit(vector, offset) << i);
-        }
-
-        return nibblet;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//==================================================================================== GameInput ============================================================================================//
 
 // GAMEINPUT_MAX_BYTES * GAMEINPUT_MAX_PLAYERS * 8 must be less than
-    // 2^BITVECTOR_NIBBLE_SIZE (see bitvector.h)
+// 2^BITVECTOR_NIBBLE_SIZE (see ln 1189)
 
 constexpr int GAMEINPUT_MAX_BYTES = 9;
 constexpr int GAMEINPUT_MAX_PLAYERS = 2;
@@ -1585,7 +1587,8 @@ namespace GGPO
         }
     };
 }
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//==================================================================================== InputQueue ============================================================================================//
 
 #define PREVIOUS_FRAME(offset)   (((offset) == 0) ? (INPUT_QUEUE_LENGTH - 1) : ((offset) - 1))
 
@@ -1968,7 +1971,7 @@ namespace GGPO
     };
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//==================================================================================== TimeSync ============================================================================================//
 
 constexpr int FRAME_WINDOW_SIZE = 40;
 constexpr int MIN_UNIQUE_FRAMES = 10;
@@ -2029,7 +2032,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
 
               radvantage = sum / (float)GGPO_ARRAY_SIZE(_remote);
 
-              static int count = 0;
+              static atomic<int> count = 0;
               count++;
 
               // See if someone should take action.  The person furthest ahead
@@ -2082,7 +2085,7 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
       };
  }
  
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// SyncTestBackend
+ //==================================================================================== Sync ============================================================================================//
 
 namespace GGPO
 {
@@ -2411,12 +2414,7 @@ namespace GGPO
 
 }
 
-/* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
+//==================================================================================== IPollSink ============================================================================================//
 
 #if defined(_WIN32) || defined(_WIN64) //idfk
     #define GGPO_HANDLE HANDLE
@@ -2519,10 +2517,10 @@ namespace GGPO
 
               if (_start_time == 0)
               {
-                  _start_time = Platform::GetCurrentTimeMS();
+                  _start_time = Platform::GetMonotonicTimeMS();
               }
 
-              int elapsed = Platform::GetCurrentTimeMS() - _start_time;
+              int elapsed = Platform::GetMonotonicTimeMS() - _start_time;
               int maxwait = ComputeWaitTime(elapsed);
 
               if (maxwait != INFINITE)
@@ -2615,8 +2613,8 @@ namespace GGPO
       };
  }
 
-////////////////////////////////////////////////////////////////////////////////// ggponet.h
- 
+ //==================================================================================== Udp ============================================================================================//
+
 namespace GGPO
 {
      class Udp
@@ -2738,24 +2736,131 @@ namespace GGPO
 
      };
 }
- 
- /* -----------------------------------------------------------------------
- * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
 
-static const int UDP_HEADER_SIZE = 28;     /* Size of IP + UDP headers */
-static const int NUM_SYNC_PACKETS = 5;
-static const int SYNC_RETRY_INTERVAL = 2000;
-static const int SYNC_FIRST_RETRY_INTERVAL = 500;
-static const int RUNNING_RETRY_INTERVAL = 200;
-static const int KEEP_ALIVE_INTERVAL = 200;
-static const int QUALITY_REPORT_INTERVAL = 1000;
-static const int NETWORK_STATS_INTERVAL = 1000;
-static const int UDP_SHUTDOWN_TIMER = 5000;
-static const int MAX_SEQ_DISTANCE = (1 << 15);
+//==================================================================================== UdpMsg ============================================================================================//
+
+constexpr int MAX_COMPRESSED_BITS = 4096;
+constexpr int UDP_MSG_MAX_PLAYERS = 4;
+
+//#pragma pack(push, 1)
+
+struct UdpMsg
+{
+    enum MsgType
+    {
+        Invalid = 0,
+        SyncRequest = 1,
+        SyncReply = 2,
+        Input = 3,
+        QualityReport = 4,
+        QualityReply = 5,
+        KeepAlive = 6,
+        InputAck = 7,
+    };
+
+    struct connect_status
+    {
+        bool disconnected; //= false; THESE initialized values cause a deleted function error ill change this later i want deafult initialized values for memory safety
+        int last_frame; //= -1;
+    };
+
+    struct
+    {
+        uint16_t         magic;
+        uint16_t         sequence_number;
+        uint8_t          type;            /* packet type */
+    } hdr;
+    union
+    {
+        struct
+        {
+            uint32_t      random_request;  /* please reply back with this random data */
+            uint16_t      remote_magic;
+            uint8_t       remote_endpoint;
+        } sync_request;
+
+        struct
+        {
+            uint32_t      random_reply;    /* OK, here's your random data back */
+        } sync_reply;
+
+        struct
+        {
+            int8_t        frame_advantage; /* what's the other guy's frame advantage? */
+            uint32_t      ping;
+        } quality_report;
+
+        struct
+        {
+            uint32_t      pong;
+        } quality_reply;
+
+        struct
+        {
+            connect_status    peer_connect_status[UDP_MSG_MAX_PLAYERS];
+
+            uint32_t            start_frame;
+
+            int               disconnect_requested : 1;
+            int               ack_frame : 31;
+
+            uint16_t            num_bits;
+            uint8_t             input_size; // XXX: shouldn't be in every single packet!
+            uint8_t             bits[MAX_COMPRESSED_BITS]; /* must be last */
+        } input;
+
+        struct
+        {
+            int               ack_frame : 31;
+        } input_ack;
+
+    } u;
+
+public:
+    int PacketSize()
+    {
+        return sizeof(hdr) + PayloadSize();
+    }
+
+    int PayloadSize()
+    {
+        int size;
+
+        switch (hdr.type)
+        {
+        case SyncRequest:   return sizeof(u.sync_request);
+        case SyncReply:     return sizeof(u.sync_reply);
+        case QualityReport: return sizeof(u.quality_report);
+        case QualityReply:  return sizeof(u.quality_reply);
+        case InputAck:      return sizeof(u.input_ack);
+        case KeepAlive:     return 0;
+        case Input:
+            size = (int)((char*)&u.input.bits - (char*)&u.input);
+            size += (u.input.num_bits + 7) / 8;
+            return size;
+        }
+
+        GGPO_ASSERT(false); // ??????????
+
+        return 0;
+    }
+
+    UdpMsg(MsgType t) { hdr.type = (uint8_t)t; }
+};
+
+//#pragma pack(pop) 
+//==================================================================================== UdpProtocol ============================================================================================//
+
+constexpr int UDP_HEADER_SIZE = 28;     /* Size of IP + UDP headers */
+constexpr int NUM_SYNC_PACKETS = 5;
+constexpr int SYNC_RETRY_INTERVAL = 2000;
+constexpr int SYNC_FIRST_RETRY_INTERVAL = 500;
+constexpr int RUNNING_RETRY_INTERVAL = 200;
+constexpr int KEEP_ALIVE_INTERVAL = 200;
+constexpr int QUALITY_REPORT_INTERVAL = 1000;
+constexpr int NETWORK_STATS_INTERVAL = 1000;
+constexpr int UDP_SHUTDOWN_TIMER = 5000;
+constexpr int MAX_SEQ_DISTANCE = (1 << 15);
 
 namespace GGPO
 {
@@ -2818,7 +2923,7 @@ namespace GGPO
                 return true;
             }
 
-            unsigned int now = Platform::GetCurrentTimeMS();
+            unsigned int now = Platform::GetMonotonicTimeMS();
             unsigned int next_interval;
 
             PumpSendQueue();
@@ -2846,7 +2951,7 @@ namespace GGPO
                 if (not _state.running.last_quality_report_time or _state.running.last_quality_report_time + QUALITY_REPORT_INTERVAL < now)
                 {
                     UdpMsg* msg = new UdpMsg(UdpMsg::QualityReport);
-                    msg->u.quality_report.ping = Platform::GetCurrentTimeMS();
+                    msg->u.quality_report.ping = Platform::GetMonotonicTimeMS();
                     msg->u.quality_report.frame_advantage = (uint8_t)_local_frame_advantage;
                     SendMsg(msg);
                     _state.running.last_quality_report_time = now;
@@ -2924,7 +3029,7 @@ namespace GGPO
             _udp(NULL)
         {
             udp_protocol_logger = make_unique<Logger>();
-            udp_protocol_logger->Initialize("UDPProtocolLogger", Logger::LogLevel::All);
+            udp_protocol_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "UDPProtocolLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
 
             _last_sent_input.init(-1, NULL, 1);
             _last_received_input.init(-1, NULL, 1);
@@ -3094,7 +3199,7 @@ namespace GGPO
             }
             if (handled)
             {
-                _last_recv_time = Platform::GetCurrentTimeMS();
+                _last_recv_time = Platform::GetMonotonicTimeMS();
 
                 if (_disconnect_notify_sent and _current_state == Running)
                 {
@@ -3108,7 +3213,7 @@ namespace GGPO
             Disconnect()
         {
             _current_state = Disconnected;
-            _shutdown_timeout = Platform::GetCurrentTimeMS() + UDP_SHUTDOWN_TIMER;
+            _shutdown_timeout = Platform::GetMonotonicTimeMS() + UDP_SHUTDOWN_TIMER;
         }
 
         void
@@ -3214,7 +3319,7 @@ namespace GGPO
         void
             UpdateNetworkStats(void)
         {
-            int now = Platform::GetCurrentTimeMS();
+            int now = Platform::GetMonotonicTimeMS();
 
             if (_stats_start_time == 0)
             {
@@ -3298,7 +3403,7 @@ namespace GGPO
                 break;
 
             default:
-                GGPO_ASSERT(FALSE and "Unknown UdpMsg type.");
+                GGPO_ASSERT(false and "Unknown UdpMsg type.");
             }
         }
 
@@ -3332,13 +3437,13 @@ namespace GGPO
             LogMsg("send", msg);
 
             _packets_sent++;
-            _last_send_time = Platform::GetCurrentTimeMS();
+            _last_send_time = Platform::GetMonotonicTimeMS();
             _bytes_sent += msg->PacketSize();
 
             msg->hdr.magic = _magic_number;
             msg->hdr.sequence_number = _next_send_seq++;
 
-            _send_queue.SafePush(QueueEntry(Platform::GetCurrentTimeMS(), _peer_addr, msg));
+            _send_queue.SafePush(QueueEntry(Platform::GetMonotonicTimeMS(), _peer_addr, msg));
             PumpSendQueue();
         }
 
@@ -3355,7 +3460,7 @@ namespace GGPO
                     // value, but this will do for now.
                     int jitter = (_send_latency * 2 / 3) + ((rand() % _send_latency) / 3);
 
-                    if (Platform::GetCurrentTimeMS() < _send_queue.Front().queue_time + jitter)
+                    if (Platform::GetMonotonicTimeMS() < _send_queue.Front().queue_time + jitter)
                     {
                         break;
                     }
@@ -3373,7 +3478,7 @@ namespace GGPO
                         //???????????????????????????????????????????????????????? WHY IS THIS HERE TONY ANSWER ME
                     }
 
-                    _oo_packet.send_time = Platform::GetCurrentTimeMS() + delay;
+                    _oo_packet.send_time = Platform::GetMonotonicTimeMS() + delay;
                     _oo_packet.msg = entry.msg;
                     _oo_packet.dest_addr = entry.dest_addr;
                 }
@@ -3388,7 +3493,7 @@ namespace GGPO
 
                 _send_queue.Pop();
             }
-            if (_oo_packet.msg and _oo_packet.send_time < Platform::GetCurrentTimeMS())
+            if (_oo_packet.msg and _oo_packet.send_time < Platform::GetMonotonicTimeMS())
             {
                 udp_protocol_logger->Info("sending rogue oop!", "udp_proto.cpp");
 
@@ -3469,7 +3574,7 @@ namespace GGPO
         bool
             OnInvalid(UdpMsg* msg, int len)
         {
-            GGPO_ASSERT(FALSE and "Invalid msg in UdpProtocol");
+            GGPO_ASSERT(false and "Invalid msg in UdpProtocol");
             return false;
         }
 
@@ -3634,7 +3739,7 @@ namespace GGPO
 
                         _last_received_input.Description(desc);
 
-                        _state.running.last_input_packet_recv_time = Platform::GetCurrentTimeMS();
+                        _state.running.last_input_packet_recv_time = Platform::GetMonotonicTimeMS();
 
                         udp_protocol_logger->Info(format("Sending frame {} to emu queue {} ({}).", _last_received_input.frame, _queue, desc), "udp_proto.cpp");
                         QueueEvent(evt);
@@ -3697,7 +3802,7 @@ namespace GGPO
         bool
             OnQualityReply(UdpMsg* msg, int len)
         {
-            _round_trip_time = Platform::GetCurrentTimeMS() - msg->u.quality_reply.pong;
+            _round_trip_time = Platform::GetMonotonicTimeMS() - msg->u.quality_reply.pong;
             return true;
         }
 
@@ -3795,131 +3900,7 @@ namespace GGPO
     };
 }
  
-/* -----------------------------------------------------------------------
- * GGPO.net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
-
- constexpr int MAX_COMPRESSED_BITS = 4096;
- constexpr int UDP_MSG_MAX_PLAYERS = 4;
- 
- //#pragma pack(push, 1)
- 
- struct UdpMsg
- {
-    enum MsgType 
-    {
-       Invalid       = 0,
-       SyncRequest   = 1,
-       SyncReply     = 2,
-       Input         = 3,
-       QualityReport = 4,
-       QualityReply  = 5,
-       KeepAlive     = 6,
-       InputAck      = 7,
-    };
- 
-    struct connect_status
-    {
-        bool disconnected; //= false; THESE initialized values cause a deleted function error ill change this later i want deafult initialized values for memory safety
-        int last_frame; //= -1;
-    };
- 
-    struct 
-    {
-       uint16_t         magic;
-       uint16_t         sequence_number;
-       uint8_t          type;            /* packet type */
-    } hdr;
-    union 
-    {
-       struct 
-       {
-          uint32_t      random_request;  /* please reply back with this random data */
-          uint16_t      remote_magic;
-          uint8_t       remote_endpoint;
-       } sync_request;
-       
-       struct 
-       {
-          uint32_t      random_reply;    /* OK, here's your random data back */
-       } sync_reply;
-       
-       struct 
-       {
-          int8_t        frame_advantage; /* what's the other guy's frame advantage? */
-          uint32_t      ping;
-       } quality_report;
-       
-       struct 
-       {
-          uint32_t      pong;
-       } quality_reply;
- 
-       struct 
-       {
-          connect_status    peer_connect_status[UDP_MSG_MAX_PLAYERS];
- 
-          uint32_t            start_frame;
- 
-          int               disconnect_requested:1;
-          int               ack_frame:31;
- 
-          uint16_t            num_bits;
-          uint8_t             input_size; // XXX: shouldn't be in every single packet!
-          uint8_t             bits[MAX_COMPRESSED_BITS]; /* must be last */
-       } input;
- 
-       struct 
-       {
-          int               ack_frame:31;
-       } input_ack;
- 
-    } u;
- 
- public:
-    int PacketSize() 
-    {
-       return sizeof(hdr) + PayloadSize();
-    }
- 
-    int PayloadSize() 
-    {
-       int size;
- 
-       switch (hdr.type) 
-       {
-           case SyncRequest:   return sizeof(u.sync_request);
-           case SyncReply:     return sizeof(u.sync_reply);
-           case QualityReport: return sizeof(u.quality_report);
-           case QualityReply:  return sizeof(u.quality_reply);
-           case InputAck:      return sizeof(u.input_ack);
-           case KeepAlive:     return 0;
-           case Input:
-              size = (int)((char *)&u.input.bits - (char *)&u.input);
-              size += (u.input.num_bits + 7) / 8;
-              return size;
-       }
- 
-       GGPO_ASSERT(false); // ??????????
- 
-       return 0;
-    }
- 
-    UdpMsg(MsgType t) { hdr.type = (uint8_t)t; }
- };
- 
- //#pragma pack(pop)
-
-
- /* -----------------------------------------------------------------------
- * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
+//==================================================================================== SyncTest Backend ============================================================================================//
 
 namespace GGPO
 {
@@ -3974,6 +3955,7 @@ namespace GGPO
                  _callbacks.on_event(&info);
                  _running = true;
              }
+
              return ErrorCode::OK;
          }
 
@@ -4143,12 +4125,7 @@ namespace GGPO
      };
 }
  
-/* -----------------------------------------------------------------------
- * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
+//==================================================================================== Spectator Backend ============================================================================================//
  
  constexpr int SPECTATOR_FRAME_BUFFER_SIZE = 64;
  
@@ -4199,11 +4176,10 @@ namespace GGPO
             //_callbacks.begin_game(gamename); //?????????????????????????????????
         }
 
-        virtual ~SpectatorBackend() = default;
- 
+        ~SpectatorBackend() = default;
  
       public:
-          virtual ErrorCode
+          ErrorCode
               DoPoll(int timeout)
           {
               _poll.Pump(0);
@@ -4212,7 +4188,7 @@ namespace GGPO
               return ErrorCode::OK;
           }
 
-          virtual ErrorCode
+          ErrorCode
               SyncInput
               (
                   void* values,
@@ -4253,7 +4229,7 @@ namespace GGPO
               return ErrorCode::OK;
           }
 
-          virtual ErrorCode
+          ErrorCode
               IncrementFrame(void)
           {
               spectator_backend_logger->Info(format("End of frame ({})...", _next_input_to_send - 1), "spectator.cpp");
@@ -4263,43 +4239,8 @@ namespace GGPO
               return ErrorCode::OK;
           }
  
-          virtual ErrorCode AddPlayer(Player* player, PlayerHandle* handle)
-          {
-              return ErrorCode::UNSUPPORTED;
-          }
- 
-          virtual ErrorCode AddLocalInput(PlayerHandle player, void* values, int size) //??????
-          {
-              return ErrorCode::OK;
-          }
- 
-          virtual ErrorCode DisconnectPlayer(PlayerHandle handle)
-          {
-              return ErrorCode::UNSUPPORTED;
-          }
- 
-          virtual ErrorCode GetNetworkStats(NetworkStats* stats, PlayerHandle handle)
-          {
-              return ErrorCode::UNSUPPORTED;
-          }
- 
-          virtual ErrorCode SetFrameDelay(PlayerHandle player, int delay)
-          {
-              return ErrorCode::UNSUPPORTED;
-          }
- 
-          virtual ErrorCode SetDisconnectTimeout(int timeout)
-          {
-              return ErrorCode::UNSUPPORTED;
-          }
- 
-          virtual ErrorCode SetDisconnectNotifyStart(int timeout)
-          {
-              return ErrorCode::UNSUPPORTED;
-          }
- 
       public:
-          virtual void
+          void
               OnMsg
               (
                   sockaddr_in& from,
@@ -4314,19 +4255,23 @@ namespace GGPO
           }
  
       protected:
-          void
-              PollUdpProtocolEvents(void)
+          ErrorCode
+              PollUdpProtocolEvents(RingBuffer<Event, GGPO_DEFAULT_RINGBUFFER_SIZE>& fp_EventQueue)
           {
               UdpProtocol::Event evt;
 
               while (_host.GetEvent(evt))
               {
-                  OnUdpProtocolEvent(evt);
+                  OnUdpProtocolEvent(evt, fp_EventQueue);
               }
           }
  
-          void
-              OnUdpProtocolEvent(UdpProtocol::Event& evt)
+          ErrorCode
+              OnUdpProtocolEvent
+              (
+                  UdpProtocol::Event& evt,
+                  RingBuffer<Event, GGPO_DEFAULT_RINGBUFFER_SIZE>& fp_EventQueue
+              )
           {
               Event info;
 
@@ -4335,7 +4280,7 @@ namespace GGPO
               case UdpProtocol::Event::Connected:
                   info.code = EventCode::ConnectedToPeer;
                   info.u.connected.player = 0;
-                  _callbacks.on_event(&info);
+                  fp_EventQueue.ForcePush(info);
                   break;
 
               case UdpProtocol::Event::Synchronizing:
@@ -4343,7 +4288,7 @@ namespace GGPO
                   info.u.synchronizing.player = 0;
                   info.u.synchronizing.count = evt.u.synchronizing.count;
                   info.u.synchronizing.total = evt.u.synchronizing.total;
-                  _callbacks.on_event(&info);
+                  fp_EventQueue.ForcePush(info);
                   break;
 
               case UdpProtocol::Event::Synchronzied:
@@ -4351,10 +4296,10 @@ namespace GGPO
                   {
                       info.code = EventCode::SynchronizedWithPeer;
                       info.u.synchronized.player = 0;
-                      _callbacks.on_event(&info);
+                      fp_EventQueue.ForcePush(info);
 
                       info.code = EventCode::Running;
-                      _callbacks.on_event(&info);
+                      fp_EventQueue.ForcePush(info);
                       _synchronizing = false;
                   }
                   break;
@@ -4363,19 +4308,19 @@ namespace GGPO
                   info.code = EventCode::ConnectionInterrupted;
                   info.u.connection_interrupted.player = 0;
                   info.u.connection_interrupted.disconnect_timeout = evt.u.network_interrupted.disconnect_timeout;
-                  _callbacks.on_event(&info);
+                  fp_EventQueue.ForcePush(info);
                   break;
 
               case UdpProtocol::Event::NetworkResumed:
                   info.code = EventCode::ConnectionResumed;
                   info.u.connection_resumed.player = 0;
-                  _callbacks.on_event(&info);
+                  fp_EventQueue.ForcePush(info);
                   break;
 
               case UdpProtocol::Event::Disconnected:
                   info.code = EventCode::DisconnectedFromPeer;
                   info.u.disconnected.player = 0;
-                  _callbacks.on_event(&info);
+                  fp_EventQueue.ForcePush(info);
                   break;
 
               case UdpProtocol::Event::Input:
@@ -4400,141 +4345,7 @@ namespace GGPO
       };
  }
 
- /* -----------------------------------------------------------------------
- * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
-
-namespace GGPO
-{
-     struct Session
-     {
-         Session() = default;
-         ~Session() = default;
-
-         ErrorCode 
-             AddPlayer
-             (
-                 Player* player,
-                 PlayerHandle* handle
-             )
-         {
-
-             return ErrorCode::OK;
-         }
-
-         ErrorCode 
-             AddLocalInput
-             (
-                 PlayerHandle player,
-                 void* values,
-                 int size
-             )
-         {
-
-             return ErrorCode::OK;
-         }
-
-         ErrorCode 
-             SyncInput
-             (
-                 void* values,
-                 int size,
-                 int* disconnect_flags
-             )
-         {
-
-             return ErrorCode::OK;
-         }
-
-         ErrorCode 
-             DoPoll(int timeout) 
-         {
-
-             return ErrorCode::OK; 
-         }
-
-         ErrorCode 
-             IncrementFrame(void) 
-         { 
-
-             return ErrorCode::OK; 
-         }
-
-         ErrorCode 
-             Chat(char* text) 
-         { 
-
-             return ErrorCode::OK; 
-         }
-
-         ErrorCode 
-             DisconnectPlayer(PlayerHandle handle) 
-         { 
-
-             return ErrorCode::OK; 
-         }
-
-         ErrorCode 
-             GetNetworkStats
-            (
-                NetworkStats* stats, 
-                PlayerHandle handle
-            ) 
-         { 
-
-             return ErrorCode::OK; 
-         }
-
-         ErrorCode 
-             SetFrameDelay
-             (
-                 PlayerHandle player, 
-                 int delay
-             ) 
-         { 
-
-             return ErrorCode::OK;
-         }
-
-         ErrorCode 
-             SetDisconnectTimeout(int timeout) 
-         { 
-
-             return ErrorCode::OK;
-         }
-
-         ErrorCode 
-             SetDisconnectNotifyStart(int timeout) 
-         { 
-
-             return ErrorCode::OK;
-         }
-
-
-     protected:
-         unique_ptr<Logger> logger = nullptr;
-         RingBuffer<Event, 64> pm_EventQueue;
-
-         Sync pm_Sync;
-         Udp pm_Udp;
-
-         vector<UdpProtocol> pm_Endpoints; //needs to be dynamically sized ig for now since total size of lobby isn't knowable from compile time
-
-         Peer2PeerBackend* pm_P2P = nullptr;
-         vector<SpectatorBackend> pm_Spectators;
-         
-     };
-}
-
-/* -----------------------------------------------------------------------
- * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
+//==================================================================================== P2P Backend ============================================================================================//
 
 static constexpr int RECOMMENDATION_INTERVAL = 240;
 static constexpr int DEFAULT_DISCONNECT_TIMEOUT = 5000;
@@ -4600,7 +4411,6 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           {
               delete[] _endpoints;
           }
- 
  
       public:
           virtual ErrorCode
@@ -4792,10 +4602,13 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               }
               flags = _sync.SynchronizeInputs(values, size);
 
-              if (disconnect_flags)
+              if (not disconnect_flags)
               {
-                  *disconnect_flags = flags;
+                  p2p_backend_logger->Error("Tried to pass nullptr ref to SyncInput(), nothing was done with disconnect_flags arg", "P2P");
+                  return ErrorCode::NULLPTR_PASSED_AS_VALUE;
               }
+
+              *disconnect_flags = flags;
 
               return ErrorCode::OK;
           }
@@ -4943,23 +4756,39 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           }
  
       protected:
-          ErrorCode
-              PlayerHandleToQueue(PlayerHandle player, int* queue)
-          {
-              int offset = ((int)player - 1);
+        ErrorCode
+            PlayerHandleToQueue
+            (
+                PlayerHandle player, 
+                int* queue
+            )
+        {
+            int offset = ((int)player - 1);
 
-              if (offset < 0 or offset >= _num_players)
-              {
-                  return ErrorCode::INVALID_PLAYER_HANDLE;
-              }
+            if (offset < 0 or offset >= _num_players)
+            {
+                return ErrorCode::INVALID_PLAYER_HANDLE;
+            }
 
-              *queue = offset;
+            *queue = offset;
 
-              return ErrorCode::OK;
-          }
+            return ErrorCode::OK;
+        }
 
-          PlayerHandle QueueToPlayerHandle(int queue) { return (PlayerHandle)(queue + 1); }
-          PlayerHandle QueueToSpectatorHandle(int queue) { return (PlayerHandle)(queue + 1000); } /* out of range of the player array, basically */
+        PlayerHandle 
+            QueueToPlayerHandle
+            (
+                int queue
+            ) 
+        { 
+            return (PlayerHandle)(queue + 1); 
+        }
+
+          PlayerHandle 
+              QueueToSpectatorHandle(int queue) 
+          { 
+              return (PlayerHandle)(queue + 1000); 
+          } /* out of range of the player array, basically */
           
           void
               DisconnectPlayerQueue(int queue, int syncto)
@@ -5200,31 +5029,33 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
 
           virtual void OnSyncEvent(Sync::Event& e) { }
 
-          virtual void
+          virtual Event
               OnUdpProtocolEvent(UdpProtocol::Event& evt, PlayerHandle handle)
           {
               Event info;
 
               switch (evt.type)
               {
-              case UdpProtocol::Event::Connected:
-                  info.code = EventCode::ConnectedToPeer;
-                  info.u.connected.player = handle;
-                  _callbacks.on_event(&info);
-                  break;
+                case UdpProtocol::Event::Connected:
+                {
+                    info.code = EventCode::ConnectedToPeer;
+                    info.u.connected.player = handle;
+                    return info;
+                }
+                break;
 
               case UdpProtocol::Event::Synchronizing:
                   info.code = EventCode::SynchronizingWithPeer;
                   info.u.synchronizing.player = handle;
                   info.u.synchronizing.count = evt.u.synchronizing.count;
                   info.u.synchronizing.total = evt.u.synchronizing.total;
-                  _callbacks.on_event(&info);
+                  return info;
                   break;
 
               case UdpProtocol::Event::Synchronzied:
                   info.code = EventCode::SynchronizedWithPeer;
                   info.u.synchronized.player = handle;
-                  _callbacks.on_event(&info);
+                  return info;
 
                   CheckInitialSync();
                   break;
@@ -5233,13 +5064,13 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
                   info.code = EventCode::ConnectionInterrupted;
                   info.u.connection_interrupted.player = handle;
                   info.u.connection_interrupted.disconnect_timeout = evt.u.network_interrupted.disconnect_timeout;
-                  _callbacks.on_event(&info);
+                  return info;
                   break;
 
               case UdpProtocol::Event::NetworkResumed:
                   info.code = EventCode::ConnectionResumed;
                   info.u.connection_resumed.player = handle;
-                  _callbacks.on_event(&info);
+                  return info;
                   break;
               }
           }
@@ -5301,7 +5132,9 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           Sync                  _sync;
           Udp                   _udp;
           UdpProtocol* _endpoints;
+
           array <UdpProtocol, MAX_SPECTATORS> _spectators = {};
+
           int                   _num_spectators;
           int                   _input_size;
  
@@ -5316,258 +5149,222 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
           array<UdpMsg::connect_status, UDP_MSG_MAX_PLAYERS> _local_connect_status = {};
       };
  }
- 
+
+ //=========================================================================================== Main API UwU ===========================================================================================//
+
+ namespace GGPO
+ {
+     enum class SessionType
+     {
+         P2P,
+         Spectator
+     };
+
+     struct Session
+     {
+         Session() = default;
+         ~Session() = default;
+
+         int 
+             PollEvents(Event* fp_Out)
+         {
+             if (pm_EventQueue.IsEmpty()) //return false when passed a nullptr ref or queue is empty uwu
+             {
+                 return 0; //business as usual
+             }
+             if (not fp_Out) //THROW ERROR: nullptr found when object was expected
+             {
+                 logger->Error(format("Tried to pass a nullptr reference to Event inside PollEvents() within Session ID: {}", 69), "Session");
+                 return 0;
+             }
+
+             *fp_Out = pm_EventQueue.Front();
+             pm_EventQueue.Pop();
+
+             return 1;
+         }
+
+         ErrorCode 
+             StartSession(SessionMode mode) 
+         {
+             pm_Mode = mode;
+             pm_Sync.Init(config);
+             if (pm_Mode == SessionMode::SyncTest) {
+                 pm_CheckDistance = 60; // e.g. every 60 frames, run verification
+             }
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             AddPlayer
+             (
+                 Player* player,
+                 PlayerHandle* handle
+             )
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             AddLocalInput
+             (
+                 PlayerHandle player,
+                 void* values,
+                 int size
+             )
+         {
+             if (not values)
+             {
+                 Print("tried to pass nullptr reference to SyncInput() as the second argument");
+                 return ErrorCode::NULLPTR_PASSED_AS_VALUE;
+             }
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             SyncInput
+             (
+                 void* values,
+                 int size,
+                 int* disconnect_flags
+             )
+         {
+             if (not values)
+             {
+                 Print("tried to pass nullptr reference to SyncInput() as the first argument");
+                 return ErrorCode::NULLPTR_PASSED_AS_VALUE;
+             }
+             if (not disconnect_flags)
+             {
+                 Print("tried to pass nullptr reference to SyncInput() as the disconnect flags");
+                 return ErrorCode::NULLPTR_PASSED_AS_VALUE;
+             }
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             RunSyncTestChecks()
+         {
+             const int frame = pm_Sync.GetFrameCount();
+             // push saved frame info
+             SavedInfo info{
+                 frame,
+                 pm_Sync.GetLastSavedFrame().checksum,
+                 pm_Sync.GetLastSavedFrame().buf
+             };
+             pm_SavedFrames.SafePush(info);
+
+             if (frame - pm_LastVerified >= pm_CheckDistance) {
+                 pm_Sync.LoadFrame(pm_LastVerified);
+                 pm_RollingBack = true;
+
+                 while (!pm_SavedFrames.IsEmpty()) {
+                     auto info = pm_SavedFrames.Front();
+                     pm_SavedFrames.Pop();
+
+                     // Re-run frame and compare checksums
+                     int newChecksum = pm_Sync.GetLastSavedFrame().checksum;
+                     if (info.checksum != newChecksum) {
+                         logger->Error("Desync detected!");
+                         return ErrorCode::FATAL_DESYNC;
+                     }
+                 }
+
+                 pm_LastVerified = frame;
+                 pm_RollingBack = false;
+             }
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             DoPoll(int timeout)
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             IncrementFrame(void)
+         {
+             pm_Sync.IncrementFrame();
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             Chat(char* text)
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             DisconnectPlayer(PlayerHandle handle)
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             GetNetworkStats
+             (
+                 NetworkStats* stats,
+                 PlayerHandle handle
+             )
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             SetFrameDelay
+             (
+                 PlayerHandle player,
+                 int delay
+             )
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             SetDisconnectTimeout(int timeout)
+         {
+
+             return ErrorCode::OK;
+         }
+
+         ErrorCode
+             SetDisconnectNotifyStart(int timeout)
+         {
+
+             return ErrorCode::OK;
+         }
 
 
+     protected:
+         bool pm_IsHost = false;
+         bool pm_IsInRollback = false;
 
+         unique_ptr<Logger> logger = nullptr;
+         RingBuffer<Event, 64> pm_EventQueue;
 
+         Sync pm_Sync;
+         Udp pm_Udp;
 
+         vector<UdpProtocol> pm_Endpoints; //needs to be dynamically sized ig for now since total size of lobby isn't knowable from compile time
 
+         unique_ptr<SyncTestBackend> pm_SyncTestBackend = nullptr;
 
+         unique_ptr<Peer2PeerBackend> pm_P2P = nullptr;
+         vector<SpectatorBackend> pm_Spectators;
+     };
+ }
 
+ //=========================================================================================== END OwO ===========================================================================================//
 
-
-
-
-
- /* -----------------------------------------------------------------------
- * .net (http://ggpo.net)  -  Copyright 2009 GroundStorm Studios, LLC.
- *
- * Use of this software is governed by the MIT license that can be found
- * in the LICENSE file.
- */
-
-namespace GGPO
-{
-
-    struct SessionManager
-    {
-    private:
-
-    public:
-
-        ErrorCode
-            ggpo_start_session
-            (
-                Session** session,
-                const char* game,
-                int num_players,
-                int input_size,
-                unsigned short localport
-            )
-        {
-            *session = (Session*)new Peer2PeerBackend
-            (
-                game,
-                localport,
-                num_players,
-                input_size
-            );
-
-            return ErrorCode::OK;
-        }
-
-        ErrorCode
-            ggpo_add_player
-            (
-                Session* ggpo,
-                Player* player,
-                PlayerHandle* handle
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-
-            return ggpo->AddPlayer(player, handle);
-        }
-
-        ErrorCode
-            ggpo_start_synctest
-            (
-                Session** ggpo,
-                char* game,
-                int num_players,
-                int input_size,
-                int frames
-            )
-        {
-            *ggpo = (Session*)new SyncTestBackend(game, frames, num_players);
-            return ErrorCode::OK;
-        }
-
-        ErrorCode
-            ggpo_set_frame_delay
-            (
-                Session* ggpo,
-                PlayerHandle player,
-                int frame_delay
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-
-            return ggpo->SetFrameDelay(player, frame_delay);
-        }
-
-        ErrorCode
-            ggpo_idle
-            (
-                Session* ggpo,
-                int timeout
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->DoPoll(timeout);
-        }
-
-        ErrorCode
-            ggpo_add_local_input
-            (
-                Session* ggpo,
-                PlayerHandle player,
-                void* values,
-                int size
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->AddLocalInput(player, values, size);
-        }
-
-        ErrorCode
-            ggpo_synchronize_input
-            (
-                Session* ggpo,
-                void* values,
-                int size,
-                int* disconnect_flags
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->SyncInput(values, size, disconnect_flags);
-        }
-
-        ErrorCode
-            ggpo_disconnect_player
-            (
-                Session* ggpo,
-                PlayerHandle player
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->DisconnectPlayer(player);
-        }
-
-        ErrorCode
-            ggpo_advance_frame(Session* ggpo)
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->IncrementFrame();
-        }
-
-        ErrorCode
-            ggpo_client_chat(Session* ggpo, char* text)
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->Chat(text);
-        }
-
-        ErrorCode
-            ggpo_get_network_stats
-            (
-                Session* ggpo,
-                PlayerHandle player,
-                NetworkStats* stats
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->GetNetworkStats(stats, player);
-        }
-
-
-        ErrorCode
-            ggpo_close_session(Session* ggpo)
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            delete ggpo;
-            return ErrorCode::OK;
-        }
-
-        ErrorCode
-            ggpo_set_disconnect_timeout(Session* ggpo, int timeout)
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            return ggpo->SetDisconnectTimeout(timeout);
-        }
-
-        ErrorCode
-            ggpo_set_disconnect_notify_start
-            (
-                Session* ggpo,
-                int timeout
-            )
-        {
-            if (not ggpo)
-            {
-                return ErrorCode::INVALID_SESSION;
-            }
-            
-            return ggpo->SetDisconnectNotifyStart(timeout);
-        }
-
-        ErrorCode
-            StartSpectating
-            (
-                Session** session,
-                const char* game,
-                int num_players,
-                int input_size,
-                unsigned short local_port,
-                char* host_ip,
-                unsigned short host_port
-            )
-        {
-            *session = (Session*) new SpectatorBackend
-            (
-                game,
-                local_port,
-                num_players,
-                input_size,
-                host_ip,
-                host_port
-            );
-            return ErrorCode::OK;
-        }
-    };
-} //namespace GGPO
 
