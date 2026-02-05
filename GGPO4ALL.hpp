@@ -33,7 +33,36 @@ before including GGPO4ALL anywhere in your code
 
 //you can change these here if u want
 
-#define GGPO_DEFAULT_LOG_LEVEL_FILTER Logger::LogLevel::WARNING_LOG | Logger::LogLevel::ERROR_LOG | Logger::LogLevel::FATAL_LOG 
+ //=========================================================================================== Macros ===========================================================================================//
+
+#ifndef GGPO_MAX_INT
+#  define GGPO_MAX_INT   18446744073709551615 //largest value for a unsigned 64 bit int
+#endif
+
+#ifndef GGPO_MAX
+#  define GGPO_MAX(x, y)        (((x) > (y)) ? (x) : (y))
+#endif
+
+#ifndef GGPO_MIN
+#  define GGPO_MIN(x, y)        (((x) < (y)) ? (x) : (y))
+#endif
+
+#ifndef GGPO_ASSERT
+
+#define GGPO_ASSERT(fp_Expr) \
+        do { \
+            if (not (fp_Expr)) \
+            { \
+                GGPO::Platform::AssertFailed(__FILE__, __LINE__, #fp_Expr, GGPO::Platform::GetProcessID()); \
+            } \
+        } while (not 69);
+
+#endif
+
+
+#define GGPO_ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
+
+#define GGPO_DEFAULT_LOGGER_FLAGS Logger::Flags::ALL_LOGS | Logger::Flags::FLUSH_ERROR | Logger::Flags::FLUSH_FATAL
 
 #define GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY "./logs"
 
@@ -47,10 +76,9 @@ before including GGPO4ALL anywhere in your code
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include <map>
+#include <unordered_map>
 #include <stdarg.h>
 #include <string_view>
-#include <stdio.h>
 #include <memory.h>
 #include <array>
 #include <cstddef>
@@ -103,7 +131,7 @@ constexpr int SPECTATOR_INPUT_INTERVAL = 4;
 
 namespace GGPO
 {
-    typedef int PlayerHandle;
+    using PlayerHandle = int;
 
     enum class PlayerType : int
     {
@@ -200,6 +228,7 @@ namespace GGPO
         case ErrorCode::TOO_MANY_SPECTATORS: return "Too many spectators connected.";
         case ErrorCode::INVALID_REQUEST: return "Invalid request.";
         case ErrorCode::FATAL_DESYNC: return "Fatal desynchronization detected!";
+        case ErrorCode::NULLPTR_PASSED_AS_VALUE: return "Tried to pass nullptr ref!";
         default: return "Unknown  error.";
         }
     }
@@ -378,147 +407,234 @@ namespace GGPO {
     public:
         constexpr RingBuffer() = default;
 
-        constexpr void Clear() noexcept
+        constexpr void
+            Clear()
+            noexcept
         {
-            pm_Head = pm_Tail = pm_Size = 0;
+            pm_Head = pm_Size = 0;
         }
 
-        constexpr void SafePush(const T& value)
+        [[nodiscard]] bool
+            TryPush(const T& fp_Val)
         {
-            assert(not IsFull() and "RingBuffer overflow (consider overwriting or increasing capacity)");
-            Push(value); // Safe push, now guaranteed to not assert
+            if (IsFull())
+            {
+                return false;
+            }
+
+            PushOverwrite(fp_Val); // Safe push, now guaranteed to not assert
+
+            return true;
         }
 
-        constexpr void SafePush(T&& value)
+        [[nodiscard]] bool
+            TryPush(T&& fp_Val)
         {
-            assert(not IsFull() and "RingBuffer overflow (consider overwriting or increasing capacity)");
-            Push(move(value)); // Move into buffer
+            if (IsFull())
+            {
+                return false;
+            }
+
+            PushOverwrite(move(fp_Val)); // Move into buffer
+
+            return true;
         }
 
         template<typename... Args>
-        constexpr void SafeEmplace(Args&&... args)
-        {
-            assert(not IsFull() and "RingBuffer overflow (consider overwriting or increasing capacity)");
-            pm_Buffer[pm_Head] = T(forward<Args>(args)...);
-            pm_Head = (pm_Head + 1) % pm_MaxCapacity;
-            ++pm_Size;
-        }
-
-        constexpr void ForcePush(const T& value)
+        [[nodiscard]] bool
+            TryEmplace(Args&&... fp_Args)
         {
             if (IsFull())
             {
-                Pop(); // Drop the oldest value to make space
+                return false;
             }
 
-            Push(value); // Safe push, now guaranteed to not assert
+            EmplaceOverwrite(forward<Args>(fp_Args)...);
+
+            return true;
         }
 
-        constexpr void ForcePush(T&& value)
+        constexpr void
+            Push(const T& fp_Val)
         {
-            if (IsFull())
-            {
-                Pop(); // Drop the oldest value
-            }
+            PushOverwrite(fp_Val);
+        }
 
-            Push(move(value)); // Move into buffer
+        constexpr void
+            Push(T&& fp_Val)
+        {
+            PushOverwrite(move(fp_Val));
         }
 
         template<typename... Args>
-        constexpr void ForceEmplace(Args&&... args)
+        constexpr void
+            Emplace(Args&&... fp_Args)
         {
-            if (IsFull())
-            {
-                Pop(); // Make room
-            }
-
-            pm_Buffer[pm_Head] = T(forward<Args>(args)...); // Construct T using args, assign to slot
-            pm_Head = (pm_Head + 1) % pm_MaxCapacity;
-            ++pm_Size;
+            EmplaceOverwrite(forward<Args>(fp_Args)...);
         }
 
-        constexpr void Pop()
+        void
+            Pop()
         {
-            assert(not IsEmpty() and "Cannot pop from empty RingBuffer");
-            pm_Tail = (pm_Tail + 1) % pm_MaxCapacity;
+            if (IsEmpty())
+            {
+                throw underflow_error("Cannot pop from empty RingBuffer");
+            }
+
+            // We remove the oldest element, oldest is at FrontIndex() so we just reduce size.
             --pm_Size;
         }
 
-        [[nodiscard]] constexpr T& Front()
+        [[nodiscard]] T&
+            Front()
         {
-            assert(not IsEmpty() and "Cannot access front of empty RingBuffer");
-            return pm_Buffer[pm_Tail];
+            if (IsEmpty())
+            {
+                throw underflow_error("Cannot access front of empty RingBuffer");
+            }
+
+            return pm_Buffer[FrontIndex()];
         }
 
-        [[nodiscard]] constexpr const T& Front() const
+        [[nodiscard]] const T&
+            Front()
+            const
         {
-            assert(not IsEmpty() and "Cannot access front of empty RingBuffer");
-            return pm_Buffer[pm_Tail];
+            if (IsEmpty())
+            {
+                throw underflow_error("Cannot access front of empty RingBuffer");
+            }
+
+            return pm_Buffer[FrontIndex()];
         }
 
-        [[nodiscard]] constexpr T& Back()
+        [[nodiscard]] T&
+            Back()
         {
-            assert(not IsEmpty() and "Cannot access back of empty RingBuffer");
-            return pm_Buffer[(pm_Head + pm_MaxCapacity - 1) % pm_MaxCapacity];
+            if (IsEmpty())
+            {
+                throw out_of_range("RingBuffer::Back: buffer is empty");
+            }
+
+            return pm_Buffer[BackIndex()];
         }
 
-        [[nodiscard]] constexpr const T& Back() const
+        [[nodiscard]] const T&
+            Back()
+            const
         {
-            assert(not IsEmpty() and "Cannot access back of empty RingBuffer");
-            return pm_Buffer[(pm_Head + pm_MaxCapacity - 1) % pm_MaxCapacity];
+            if (IsEmpty())
+            {
+                throw out_of_range("RingBuffer::Back: buffer is empty");
+            }
+
+            return pm_Buffer[BackIndex()];
         }
 
-        [[nodiscard]] constexpr T& At(size_t index)
+        [[nodiscard]] T&
+            At(size_t fp_Index)
         {
-            assert(index < pm_Size and "Index out of bounds");
-            return pm_Buffer[(pm_Tail + index) % pm_MaxCapacity];
+            if (fp_Index >= pm_Size)
+            {
+                throw out_of_range("RingBuffer::At: index out of range");
+            }
+
+            return pm_Buffer[(FrontIndex() + fp_Index) % pm_MaxCapacity];
         }
 
-        [[nodiscard]] constexpr const T& At(size_t index) const
+        [[nodiscard]] const T&
+            At(size_t fp_Index)
+            const
         {
-            assert(index < pm_Size and "Index out of bounds");
-            return pm_Buffer[(pm_Tail + index) % pm_MaxCapacity];
+            if (fp_Index >= pm_Size)
+            {
+                throw out_of_range("RingBuffer::At: index out of range");
+            }
+
+            return pm_Buffer[(FrontIndex() + fp_Index) % pm_MaxCapacity];
         }
 
-        [[nodiscard]] constexpr size_t CurrentSize() const noexcept
+        [[nodiscard]] constexpr size_t
+            CurrentSize()
+            const noexcept
         {
             return pm_Size;
         }
 
-        [[nodiscard]] constexpr size_t MaxCapacity() const noexcept
+        [[nodiscard]] constexpr size_t
+            MaxCapacity()
+            const noexcept
         {
             return pm_MaxCapacity;
         }
 
-        [[nodiscard]] constexpr bool IsEmpty() const noexcept
+        [[nodiscard]] constexpr bool
+            IsEmpty()
+            const noexcept
         {
             return pm_Size == 0;
         }
 
-        [[nodiscard]] constexpr bool IsFull() const noexcept
+        [[nodiscard]] constexpr bool
+            IsFull()
+            const noexcept
         {
             return pm_Size == pm_MaxCapacity;
         }
 
     private:
         array<T, pm_MaxCapacity> pm_Buffer{};
-        size_t pm_Head = 0;
-        size_t pm_Tail = 0;
-        size_t pm_Size = 0;
+        size_t pm_Head = 0;   // index of next write
+        size_t pm_Size = 0;   // number of valid elements
 
     private:
-        constexpr void Push(const T& value)
+        ////////////////// helpers //////////////////
+
+        [[nodiscard]] size_t
+            FrontIndex() const noexcept
         {
-            pm_Buffer[pm_Head] = value;
-            pm_Head = (pm_Head + 1) % pm_MaxCapacity;
-            ++pm_Size;
+            // Oldest element
+            return (pm_Head + pm_MaxCapacity - pm_Size) % pm_MaxCapacity;
         }
 
-        constexpr void Push(T&& value)
+        [[nodiscard]] size_t
+            BackIndex() const noexcept
         {
-            pm_Buffer[pm_Head] = move(value);
+            // Most recently inserted element
+            return (pm_Head + pm_MaxCapacity - 1) % pm_MaxCapacity;
+        }
+
+        void
+            AdvanceHead() noexcept
+        {
             pm_Head = (pm_Head + 1) % pm_MaxCapacity;
-            ++pm_Size;
+            if (pm_Size < pm_MaxCapacity)
+            {
+                ++pm_Size;
+            }
+            // If already full, we overwrote the oldest; size stays at capacity.
+        }
+
+        void
+            PushOverwrite(const T& fp_Val)
+        {
+            pm_Buffer[pm_Head] = fp_Val;
+            AdvanceHead();
+        }
+
+        void
+            PushOverwrite(T&& fp_Val)
+        {
+            pm_Buffer[pm_Head] = move(fp_Val);
+            AdvanceHead();
+        }
+
+        template<typename... Args>
+        void
+            EmplaceOverwrite(Args&&... fp_Args)
+        {
+            pm_Buffer[pm_Head] = T(forward<Args>(fp_Args)...);
+            AdvanceHead();
         }
     };
 
@@ -527,26 +643,26 @@ namespace GGPO {
     {
         constexpr void PushBack(const T& fp_Item)
         {
-            assert(pm_CurrentIndex < pm_MaxCapacity and "FixedPushBuffer overflowed!");
+            GGPO_ASSERT(pm_CurrentIndex < pm_MaxCapacity and "FixedPushBuffer overflowed!");
             pm_Data[pm_CurrentIndex++] = fp_Item;
         }
 
         template<typename... Args>
         constexpr void EmplaceBack(Args&&... fp_Args)
         {
-            assert(pm_CurrentIndex < pm_MaxCapacity and "FixedPushBuffer overflowed!");
+            GGPO_ASSERT(pm_CurrentIndex < pm_MaxCapacity and "FixedPushBuffer overflowed!");
             pm_Data[pm_CurrentIndex++] = T(forward<Args>(args)...); // Construct T using args, assign to slot
         }
 
         [[nodiscard]] constexpr T& operator[](size_t fp_Index)
         {
-            assert(fp_Index < pm_CurrentIndex);
+            GGPO_ASSERT(fp_Index < pm_CurrentIndex);
             return pm_Data[fp_Index];
         }
 
         [[nodiscard]] constexpr const T& operator[](size_t fp_Index) const
         {
-            assert(fp_Index < pm_CurrentIndex);
+            GGPO_ASSERT(fp_Index < pm_CurrentIndex);
             return pm_Data[fp_Index];
         }
 
@@ -564,7 +680,9 @@ namespace GGPO {
         array<T, pm_MaxCapacity> pm_Data{};
         size_t pm_CurrentIndex = 0;
     };
+
 } // namespace GGPO
+
 
  //=========================================================================================== Logger ===========================================================================================//
 
@@ -693,8 +811,17 @@ namespace GGPO {
 
     struct LogMessage
     {
-        string Log;
-        uint8_t Level = 69;
+        string Timestamp;  // "2025-01-01 13:37:00.123"
+        string Message;
+        string Sender;
+        uint8_t Level;
+
+        [[nodiscard]] string
+            Formatted(const string& fp_LevelName)
+            const
+        {
+            return "[" + Timestamp + "][" + fp_LevelName + "][" + Sender + "]: " + Message;
+        }
     };
 
     //////////////////////////////////////////////
@@ -709,53 +836,94 @@ namespace GGPO {
     public:
         ~Logger() ///XXX: Just copy and pasted the flushalllogs method because they have the assert at the beginning and wont work with premature exit
         {
-            for (auto& _f : pm_LogFiles)
+            for (auto& lv_LogFile : pm_LogFiles)
             {
-                if (_f.second.is_open())
+                if (lv_LogFile.second.is_open())
                 {
-                    _f.second.flush();
+                    lv_LogFile.second.flush();
                 }
             }  // Ensure all logs are flushed before destruction
 
             CloseOpenLogFiles(); //Closes any files that are open to prevent introducing vulnerabilities in privileged environments
         }
 
+        Logger(const Logger&) = delete;
+        Logger& operator=(const Logger&) = delete;
+        Logger& operator=(Logger&&) = delete;
+
+        /*
+            needed for stack allocated Create(), allows for nrvo and also is kosher since move constructors play w the strict ownership model that is the foundation of the thread owning system uwu
+            so the pattern is using optional return a nrvo Logger, and the thread thats using it calls Create() so this_thread::thread::id works properly ^_^
+        */
+        Logger(Logger&&) = default;
+
+        static constexpr uint32_t FLUSH_EVERY_N_LOGS = 256u;
+        static constexpr uint32_t MAX_NUMBER_OF_LOGS = 1024u;
+        static constexpr uintmax_t MAX_LOG_FILE_SIZE_BYTES = 10u * 1024u * 1024u; // 10 MB
+
+        static constexpr uint8_t FLUSH_TRACE_BIT = 1u << 0;
+        static constexpr uint8_t FLUSH_DEBUG_BIT = 1u << 1;
+        static constexpr uint8_t FLUSH_INFO_BIT = 1u << 2;
+        static constexpr uint8_t FLUSH_WARNING_BIT = 1u << 3;
+        static constexpr uint8_t FLUSH_ERROR_BIT = 1u << 4;
+        static constexpr uint8_t FLUSH_FATAL_BIT = 1u << 5;
+
+        using LogBuffer = RingBuffer<LogMessage, MAX_NUMBER_OF_LOGS>;
+
         //////////////////////////////////////////////
-        // Public Constructor
+        // Protected Constructor
         //////////////////////////////////////////////
-    public:
+    protected:
         Logger() = default;
 
         ////////////////////////////////////////////////
         // Helper Enum For LogLevel Specification
         ////////////////////////////////////////////////
     public:
-        enum LogLevel : uint8_t
+        enum Flags : uint32_t
         {
-            TRACE_LOG = 1 << 0,
-            DEBUG_LOG = 1 << 1,
-            INFO_LOG = 1 << 2,
-            WARNING_LOG = 1 << 3,
-            ERROR_LOG = 1 << 4,
-            FATAL_LOG = 1 << 5,
-            ALL_LOGS = TRACE_LOG | DEBUG_LOG | INFO_LOG | WARNING_LOG | ERROR_LOG | FATAL_LOG
+            // low byte is active mask
+            TRACE_LOG = 1u << 0,
+            DEBUG_LOG = 1u << 1,
+            INFO_LOG = 1u << 2,
+            WARNING_LOG = 1u << 3,
+            ERROR_LOG = 1u << 4,
+            FATAL_LOG = 1u << 5,
+
+            ALL_LOGS = TRACE_LOG | DEBUG_LOG | INFO_LOG | WARNING_LOG | ERROR_LOG | FATAL_LOG,
+
+            //middle byte is flush mask
+            FLUSH_TRACE = 1u << 8,
+            FLUSH_DEBUG = 1u << 9,
+            FLUSH_INFO = 1u << 10,
+            FLUSH_WARNING = 1u << 11,
+            FLUSH_ERROR = 1u << 12,
+            FLUSH_FATAL = 1u << 13,
+
+            FLUSH_ALL = FLUSH_TRACE | FLUSH_DEBUG | FLUSH_INFO | FLUSH_WARNING | FLUSH_ERROR | FLUSH_FATAL,
+
+            //high byte is aux flags
+            DONT_CREATE_DIRECTORY = 1u << 16,
+            LOG_TO_ONLY_SNAPSHOT_BUFFER = 1u << 17
         };
 
         //////////////////////////////////////////////
         // Protected Class Members
         //////////////////////////////////////////////
     protected:
-        bool pm_HasBeenInitialized = false;
+        unordered_map<string, ofstream> pm_LogFiles;
 
-        map<string, ofstream> pm_LogFiles;
+        unique_ptr<LogBuffer> pm_SnapshotBuffer = nullptr;
 
         string pm_LoggerName = "No_Logger_Name";
         string pm_CurrentWorkingDirectory = "nothing";
 
         thread::id pm_ThreadOwnerID;
 
-        uint8_t pm_ActiveLogMask = LogLevel::ALL_LOGS;
-        LogLevel pm_FlushMask = static_cast<LogLevel>(LogLevel::ERROR_LOG | LogLevel::FATAL_LOG); // or make this user-configurable
+        uint8_t pm_ActiveLogMask = 0;
+        uint8_t pm_FlushMask = 0;
+
+        bool pm_LogToFile = true;
 
         uint32_t pm_LogSizeCounter = 0;
 
@@ -763,109 +931,177 @@ namespace GGPO {
         // Public Methods
         //////////////////////////////////////////////
     public:
-        bool
-            Initialize
+
+        [[nodiscard]] static optional<Logger>
+            Create
             (
-                const string& fp_DesiredOutputDirectory,
                 const string& fp_DesiredLoggerName,
-                const uint8_t fp_LogLevelFlags,
-                const bool fp_ShouldCreateOutputDirectory = true
+                const uint32_t fp_Flags,
+                const string& fp_DesiredOutputDirectory = ""
             )
         {
-            if (pm_HasBeenInitialized) //stops accidental reinitialization of logmanager
+            Logger f_CreatedLogger;
+
+            if (not f_CreatedLogger.Initialize(fp_DesiredLoggerName, fp_DesiredOutputDirectory, fp_Flags))
             {
-                PrintError(format("Logger with name : '{}' has already been initialized, Logger is only allowed to initialize once", pm_LoggerName)); //can use logger name since it was already initialized uwu
+                PrintError("Unable to initialize logger named: " + fp_DesiredLoggerName);
+                return nullopt;
+            }
+
+            return f_CreatedLogger; //NRVO
+        }
+
+        [[nodiscard]] static unique_ptr<Logger>
+            CreateUnique
+            (
+                const string& fp_DesiredLoggerName,
+                const uint32_t fp_Flags,
+                const string& fp_DesiredOutputDirectory = ""
+            )
+        {
+            unique_ptr<Logger> f_CreatedLogger(new Logger()); //this is dumb but std doesn't like my private constructor uwu!
+
+            if (not f_CreatedLogger->Initialize(fp_DesiredLoggerName, fp_DesiredOutputDirectory, fp_Flags))
+            {
+                PrintError("Unable to initialize logger named: " + fp_DesiredLoggerName);
+                return nullptr;
+            }
+
+            return move(f_CreatedLogger);
+        }
+
+        [[nodiscard]] static shared_ptr<Logger>
+            CreateShared
+            (
+                const string& fp_DesiredLoggerName,
+                const uint32_t fp_Flags,
+                const string& fp_DesiredOutputDirectory = ""
+            )
+        {
+            shared_ptr<Logger> f_CreatedLogger(new Logger()); //this is dumb but std doesn't like my private constructor uwu!
+
+            if (not f_CreatedLogger->Initialize(fp_DesiredLoggerName, fp_DesiredOutputDirectory, fp_Flags))
+            {
+                PrintError("Unable to initialize logger named: " + fp_DesiredLoggerName);
+                return nullptr;
+            }
+
+            return f_CreatedLogger;
+        }
+
+        bool
+            UpdateThreadOwner //the owning thread must update and pass off the logger to be considered valid otherwise it wont uwu
+            (
+                const thread::id& fp_NewThreadID
+            )
+        {
+            if (not AssertThreadAccess("UpdateThreadOwner"))
+            {
+                //can't log here since it's only triggered by improper thread usage which will trigger asserthreadacess again
+                PrintError(format("Tried to call UpdateThreadOwner from a thread that didn't own logger named: {}", pm_LoggerName));
                 return false;
             }
 
-            pm_LoggerName = fp_DesiredLoggerName;
-
-            pm_ThreadOwnerID = this_thread::get_id();
-
-            pm_CurrentWorkingDirectory = fp_DesiredOutputDirectory + "/" + pm_LoggerName;
-
-            pm_ActiveLogMask = fp_LogLevelFlags;
-
-            // Ensure log directory exists
-            if ((not filesystem::exists(pm_CurrentWorkingDirectory)) and fp_ShouldCreateOutputDirectory)
-            {
-                try
-                {
-                    filesystem::create_directories(pm_CurrentWorkingDirectory); //XXX: this can throw so we wrap it in a try catch
-                }
-                catch (const exception& f_Exception)
-                {
-                    PrintError(format("Failed to create desired log output directory with exception: '{}'", f_Exception.what()));
-                    return false;
-                }
-            }
-            else if (not filesystem::exists(pm_CurrentWorkingDirectory))
-            {
-                PrintError("Failed to find valid log output directory");
-                return false;
-            }
-
-            //Create Log files based off of log level flags
-            const map<uint8_t, string> f_LogLevels =
-            {
-                {TRACE_LOG, "trace"},
-                {DEBUG_LOG, "debug"},
-                {INFO_LOG, "info"},
-                {WARNING_LOG, "warn"},
-                {ERROR_LOG, "error"},
-                {FATAL_LOG, "fatal"}
-            };
-
-            for (const auto& [__key, __val] : f_LogLevels)
-            {
-                if (pm_ActiveLogMask & __key)
-                {
-                    CreateLogFile(pm_CurrentWorkingDirectory, __val + ".log");
-                }
-            }
-
-            pm_HasBeenInitialized = true; //well if everything went as planned we should be good to set this to true uwu
+            pm_ThreadOwnerID = fp_NewThreadID;
 
             return true;
         }
 
-        void
-            UpdateThreadOwner()
+        [[nodiscard]] bool
+            UpdateActiveMask(const uint32_t fp_NewLogMask)
         {
-            pm_ThreadOwnerID = this_thread::get_id();
+            ////////////////////////////////////////////// Change Active Mask if logging to snapshot buffer only uwu //////////////////////////////////////////////
+
+            if (not pm_LogToFile)
+            {
+                pm_ActiveLogMask = ExtractLevelMask(fp_NewLogMask);
+                return true;
+            }
+
+            ////////////////////////////////////////////// flush all logs before making any changes //////////////////////////////////////////////
+
+            if (not FlushAllLogs())
+            {
+                return false;
+            }
+
+            ////////////////////////////////////////////// clear every file //////////////////////////////////////////////
+
+            pm_LogFiles.clear();
+
+            ////////////////////////////////////////////// Reset Mask //////////////////////////////////////////////
+
+            pm_ActiveLogMask = 0;
+
+            ////////////////////////////////////////////// Create Log files based off of Current active mask uwu //////////////////////////////////////////////
+
+            static const unordered_map<uint8_t, const string> f_LogLevels = //this is fine being static since its not mutable so reading from multiple threads is kosher
+            {
+                {TRACE_LOG, "trace.log"},
+                {DEBUG_LOG, "debug.log"},
+                {INFO_LOG, "info.log"},
+                {WARNING_LOG, "warning.log"},
+                {ERROR_LOG, "error.log"},
+                {FATAL_LOG, "fatal.log"}
+            };
+
+            for (const auto& [lv_LogEnum, lv_LogStringName] : f_LogLevels)
+            {
+                if (fp_NewLogMask & lv_LogEnum)
+                {
+                    if (not CreateLogFile(pm_CurrentWorkingDirectory, lv_LogStringName))
+                    {
+                        PrintError("Failed to create log file named: " + lv_LogStringName);
+                        return false;
+                    }
+
+                    pm_ActiveLogMask |= static_cast<uint8_t>(lv_LogEnum);
+                }
+            }
+
+            ////////////////////////////////////////////// Success! //////////////////////////////////////////////
+
+            return true;
         }
+
+        const RingBuffer<LogMessage, MAX_NUMBER_OF_LOGS>&
+            GetSnapshotBuffer()
+            const noexcept
+        {
+            return *pm_SnapshotBuffer;
+        }
+
 
         //////////////////// Flush All Logs ////////////////////
 
-        void
+        [[nodiscard]] bool
             FlushAllLogs()
         {
-#ifdef GGPO_DEBUG
             if (not AssertThreadAccess("FlushAllLogs"))
             {
-                return;
+                return false;
             }
-#endif
 
-            for (auto& _f : pm_LogFiles)
+            for (auto& lv_LogFile : pm_LogFiles)
             {
-                if (_f.second.is_open())
+                if (lv_LogFile.second.is_open())
                 {
-                    _f.second.flush();
+                    lv_LogFile.second.flush();
                 }
             }
+
+            pm_LogSizeCounter = 0; //reset since all logs have been flushed
+
+            return true;
         }
 
-        bool
+        [[nodiscard]] bool
             ValidateLogMsg(const uint8_t fp_LogLevel)
         {
-            //return early without logging if loglevel isnt active or hasnt been initialized or if accessed from the wrong thread
-#ifdef GGPO_DEBUG
-            return(pm_ActiveLogMask & fp_LogLevel) and pm_HasBeenInitialized and AssertThreadAccess("Log");
-#else
-            return (pm_ActiveLogMask & fp_LogLevel);
-#endif
+            return (AssertThreadAccess("ValidateLogMsg") and pm_ActiveLogMask & fp_LogLevel); //return early without logging if loglevel isnt active or hasnt been initialized or if accessed from the wrong thread
         }
+
+        //////////////////////////////////////////////////////////// Logging Functions  ////////////////////////////////////////////////////////////
 
         void
             Trace
@@ -874,24 +1110,30 @@ namespace GGPO {
                 const string& fp_Sender
             )
         {
-            if (ValidateLogMsg(LogLevel::TRACE_LOG))
+            if (ValidateLogMsg(static_cast<uint8_t>(Flags::TRACE_LOG))) //IMPORTANT: don't need to check if the log file was created since activelogmask tracks that as well >w< and the activemask can't be modified directly since its private
             {
                 const string f_TimeStamp = GetCurrentTimestamp();
                 const string f_LogEntry = "[" + f_TimeStamp + "][trace][" + fp_Sender + "]: " + fp_Message;
 
-                // Log to specific file and all-logs file
-                const string f_LogFileName = "trace.log";
+                pm_SnapshotBuffer->Emplace(f_TimeStamp, fp_Message, fp_Sender, static_cast<uint8_t>(Flags::TRACE_LOG));
 
-                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                if (pm_LogToFile)
                 {
-                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
-                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
-                    //pm_LogSizeCounter++;
+                    ofstream& f_LogFile = pm_LogFiles.at("trace.log"); //safe to call at() here since its synced at all times w pm_ActiveMask
 
-                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
-                    //{
-                    //    pm_LogFiles[f_LogFileName].flush();
-                    //}
+                    if (f_LogFile.is_open())
+                    {
+                        f_LogFile << f_LogEntry << "\n";
+
+                        if (pm_LogSizeCounter++ >= FLUSH_EVERY_N_LOGS)
+                        {
+                            ForceFlushAllLogs(); //AssertThreadAccess is already called so this is safe UwU >O< !!!!!
+                        }
+                        else if (pm_FlushMask & FLUSH_TRACE_BIT)
+                        {
+                            f_LogFile.flush();
+                        }
+                    }
                 }
 
 #ifdef GGPO_USING_CONSOLE
@@ -907,24 +1149,30 @@ namespace GGPO {
                 const string& fp_Sender
             )
         {
-            if (ValidateLogMsg(LogLevel::DEBUG_LOG))
+            if (ValidateLogMsg(static_cast<uint8_t>(Flags::DEBUG_LOG)))
             {
                 const string f_TimeStamp = GetCurrentTimestamp();
-                const string f_LogEntry = "[" + f_TimeStamp + "][Debug][" + fp_Sender + "]: " + fp_Message;
+                const string f_LogEntry = "[" + f_TimeStamp + "][debug][" + fp_Sender + "]: " + fp_Message;
 
-                // Log to specific file and all-logs file
-                const string f_LogFileName = "debug.log";
+                pm_SnapshotBuffer->Emplace(f_TimeStamp, fp_Message, fp_Sender, static_cast<uint8_t>(Flags::DEBUG_LOG));
 
-                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                if (pm_LogToFile)
                 {
-                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
-                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
-                    //pm_LogSizeCounter++;
+                    ofstream& f_LogFile = pm_LogFiles.at("debug.log"); // Log to specific log file >W<
 
-                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
-                    //{
-                    //    pm_LogFiles[f_LogFileName].flush();
-                    //}
+                    if (f_LogFile.is_open())
+                    {
+                        f_LogFile << f_LogEntry << "\n";
+
+                        if (pm_LogSizeCounter++ >= FLUSH_EVERY_N_LOGS)
+                        {
+                            ForceFlushAllLogs(); //AssertThreadAccess is already called so this is safe UwU >O< !!!!!
+                        }
+                        else if (pm_FlushMask & FLUSH_DEBUG_BIT)
+                        {
+                            f_LogFile.flush();
+                        }
+                    }
                 }
 
 #ifdef GGPO_USING_CONSOLE
@@ -940,24 +1188,30 @@ namespace GGPO {
                 const string& fp_Sender
             )
         {
-            if (ValidateLogMsg(LogLevel::INFO_LOG))
+            if (ValidateLogMsg(static_cast<uint8_t>(Flags::INFO_LOG)))
             {
                 const string f_TimeStamp = GetCurrentTimestamp();
-                const string f_LogEntry = "[" + f_TimeStamp + "][Info][" + fp_Sender + "]: " + fp_Message;
+                const string f_LogEntry = "[" + f_TimeStamp + "][info][" + fp_Sender + "]: " + fp_Message;
 
-                // Log to specific file and all-logs file
-                const string f_LogFileName = "info.log";
+                pm_SnapshotBuffer->Emplace(f_TimeStamp, fp_Message, fp_Sender, static_cast<uint8_t>(Flags::INFO_LOG));
 
-                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                if (pm_LogToFile)
                 {
-                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
-                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
-                    //pm_LogSizeCounter++;
+                    ofstream& f_LogFile = pm_LogFiles.at("info.log"); // Log to specific file and all-logs file
 
-                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
-                    //{
-                    //    pm_LogFiles[f_LogFileName].flush();
-                    //}
+                    if (f_LogFile.is_open())
+                    {
+                        f_LogFile << f_LogEntry << "\n";
+
+                        if (pm_LogSizeCounter++ >= FLUSH_EVERY_N_LOGS)
+                        {
+                            ForceFlushAllLogs(); //AssertThreadAccess is already called so this is safe UwU >O< !!!!!
+                        }
+                        else if (pm_FlushMask & FLUSH_INFO_BIT)
+                        {
+                            f_LogFile.flush();
+                        }
+                    }
                 }
 
 #ifdef GGPO_USING_CONSOLE
@@ -973,24 +1227,30 @@ namespace GGPO {
                 const string& fp_Sender
             )
         {
-            if (ValidateLogMsg(LogLevel::WARNING_LOG))
+            if (ValidateLogMsg(static_cast<uint8_t>(Flags::WARNING_LOG)))
             {
                 const string f_TimeStamp = GetCurrentTimestamp();
-                const string f_LogEntry = "[" + f_TimeStamp + "][Warning][" + fp_Sender + "]: " + fp_Message;
+                const string f_LogEntry = "[" + f_TimeStamp + "][warning][" + fp_Sender + "]: " + fp_Message;
 
-                // Log to specific file and all-logs file
-                const string f_LogFileName = "warning.log";
+                pm_SnapshotBuffer->Emplace(f_TimeStamp, fp_Message, fp_Sender, static_cast<uint8_t>(Flags::WARNING_LOG));
 
-                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                if (pm_LogToFile)
                 {
-                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
-                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
-                    //pm_LogSizeCounter++;
+                    ofstream& f_LogFile = pm_LogFiles.at("warning.log"); // Log to specific file and all-logs file
 
-                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
-                    //{
-                    //    pm_LogFiles[f_LogFileName].flush();
-                    //}
+                    if (f_LogFile.is_open())
+                    {
+                        f_LogFile << f_LogEntry << "\n";
+
+                        if (pm_LogSizeCounter++ >= FLUSH_EVERY_N_LOGS)
+                        {
+                            ForceFlushAllLogs(); //AssertThreadAccess is already called so this is safe UwU >O< !!!!!
+                        }
+                        else if (pm_FlushMask & FLUSH_WARNING_BIT)
+                        {
+                            f_LogFile.flush();
+                        }
+                    }
                 }
 
 #ifdef GGPO_USING_CONSOLE
@@ -1006,24 +1266,30 @@ namespace GGPO {
                 const string& fp_Sender
             )
         {
-            if (ValidateLogMsg(LogLevel::ERROR_LOG))
+            if (ValidateLogMsg(static_cast<uint8_t>(Flags::ERROR_LOG)))
             {
                 const string f_TimeStamp = GetCurrentTimestamp();
-                const string f_LogEntry = "[" + f_TimeStamp + "][Error][" + fp_Sender + "]: " + fp_Message;
+                const string f_LogEntry = "[" + f_TimeStamp + "][error][" + fp_Sender + "]: " + fp_Message;
 
-                // Log to specific file and all-logs file
-                const string f_LogFileName = "error.log";
+                pm_SnapshotBuffer->Emplace(f_TimeStamp, fp_Message, fp_Sender, static_cast<uint8_t>(Flags::ERROR_LOG));
 
-                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                if (pm_LogToFile)
                 {
-                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
-                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
-                    //pm_LogSizeCounter++;
+                    ofstream& f_LogFile = pm_LogFiles.at("error.log"); // Log to specific file and all-logs file
 
-                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
-                    //{
-                    //    pm_LogFiles[f_LogFileName].flush();
-                    //}
+                    if (f_LogFile.is_open())
+                    {
+                        f_LogFile << f_LogEntry << "\n";
+
+                        if (pm_LogSizeCounter++ >= FLUSH_EVERY_N_LOGS)
+                        {
+                            ForceFlushAllLogs(); //AssertThreadAccess is already called so this is safe UwU >O< !!!!!
+                        }
+                        else if (pm_FlushMask & FLUSH_ERROR_BIT)
+                        {
+                            f_LogFile.flush();
+                        }
+                    }
                 }
 
 #ifdef GGPO_USING_CONSOLE
@@ -1039,24 +1305,30 @@ namespace GGPO {
                 const string& fp_Sender
             )
         {
-            if (ValidateLogMsg(LogLevel::FATAL_LOG))
+            if (ValidateLogMsg(static_cast<uint8_t>(Flags::FATAL_LOG)))
             {
                 const string f_TimeStamp = GetCurrentTimestamp();
-                const string f_LogEntry = "[" + f_TimeStamp + "][Fatal][" + fp_Sender + "]: " + fp_Message;
+                const string f_LogEntry = "[" + f_TimeStamp + "][fatal][" + fp_Sender + "]: " + fp_Message;
 
-                // Log to specific file and all-logs file
-                const string f_LogFileName = "fatal.log";
+                pm_SnapshotBuffer->Emplace(f_TimeStamp, fp_Message, fp_Sender, static_cast<uint8_t>(Flags::FATAL_LOG));
 
-                if (pm_LogFiles.find(f_LogFileName) != pm_LogFiles.end() and pm_LogFiles[f_LogFileName].is_open())
+                if (pm_LogToFile)
                 {
-                    pm_LogFiles[f_LogFileName] << f_LogEntry << "\n";
-                    // Print("size of ofstream: " + to_string(sizeof(pm_LogFiles[f_LogFileName])));
-                    //pm_LogSizeCounter++;
+                    ofstream& f_LogFile = pm_LogFiles.at("fatal.log"); // Log to specific file and all-logs file
 
-                    //if (pm_LogFiles[f_LogFileName].tellg >= MAX_NUMBER_OF_LOGS)
-                    //{
-                    //    pm_LogFiles[f_LogFileName].flush();
-                    //}
+                    if (f_LogFile.is_open())
+                    {
+                        f_LogFile << f_LogEntry << "\n";
+
+                        if (pm_LogSizeCounter++ >= FLUSH_EVERY_N_LOGS)
+                        {
+                            ForceFlushAllLogs(); //AssertThreadAccess is already called so this is safe UwU >O< !!!!!
+                        }
+                        else if (pm_FlushMask & FLUSH_FATAL_BIT)
+                        {
+                            f_LogFile.flush();
+                        }
+                    }
                 }
 
 #ifdef GGPO_USING_CONSOLE
@@ -1065,36 +1337,141 @@ namespace GGPO {
             }
         }
 
-    //////////////////////////////////////////////
-    // Protected Methods
-    //////////////////////////////////////////////
+        //////////////////////////////////////////////
+        // Protected Methods
+        //////////////////////////////////////////////
     protected:
-        //////////////////// Utility Functions  ////////////////////
+        [[nodiscard]] bool
+            Initialize
+            (
+                const string& fp_DesiredLoggerName,
+                const string& fp_DesiredOutputDirectory,
+                const uint32_t fp_Flags
+            )
+        {
+#ifdef GGPO_DEBUG
+            //stringstream f_UckCPlusPlus; //XXX: cpp is a dumb fucking language sometimes holy please make good features and not dumbass nonsense holy shit
+            //f_UckCPlusPlus << this_thread::get_id();
+            //string f_CallerThreadID = f_UckCPlusPlus.str();
 
-        void
+            //PrintError(format("Logger name: '{}' from thread number : {}, [Caller Thread ID]: {}", fp_DesiredLoggerName, static_cast<uint8_t>(fp_ThreadName), f_CallerThreadID));
+#endif
+            ////////////////////////////////////////////// Store Initializer Thread ID //////////////////////////////////////////////
+
+            pm_ThreadOwnerID = this_thread::get_id();
+
+            ////////////////////////////////////////////// Set Logger Name + Directory //////////////////////////////////////////////
+
+            pm_LoggerName = fp_DesiredLoggerName;
+            pm_CurrentWorkingDirectory = fp_DesiredOutputDirectory + "/" + pm_LoggerName;
+
+            if (fp_Flags & Flags::LOG_TO_ONLY_SNAPSHOT_BUFFER)
+            {
+                pm_LogToFile = false;
+            }
+
+            ////////////////////////////////////////////// Set Flush Mask //////////////////////////////////////////////
+
+            pm_FlushMask = ExtractFlushMask(fp_Flags);
+
+            ////////////////////////////////////////////// Initialize Snapshot Ring Buffer //////////////////////////////////////////////
+
+            pm_SnapshotBuffer = make_unique<LogBuffer>();
+
+            ////////////////////////////////////////////// Ensure log directory exists //////////////////////////////////////////////
+
+            if (not filesystem::exists(pm_CurrentWorkingDirectory))
+            {
+                if (fp_Flags & Flags::DONT_CREATE_DIRECTORY)
+                {
+                    PrintError("[CRITICAL_LOGGING_ERROR]: Failed to find valid log output directory");
+                    return false;
+                }
+
+                try
+                {
+                    filesystem::create_directories(pm_CurrentWorkingDirectory); //XXX: this can throw so we wrap it in a try catch
+                }
+                catch (const exception& f_Exception)
+                {
+                    PrintError(format("Failed to create desired log output directory with exception: '{}'", f_Exception.what()));
+                    return false;
+                }
+            }
+
+            ////////////////////////////////////////////// Create Log Files Based on Current Active Mask //////////////////////////////////////////////
+
+            if (not UpdateActiveMask(fp_Flags))
+            {
+                PrintError("[CRITICAL_LOGGING_ERROR]: Failed to create required log files for logger named: " + pm_LoggerName);
+                return false;
+            }
+
+            ////////////////////////////////////////////// Success! //////////////////////////////////////////////
+
+            return true;
+        }
+
+        //////////////////////////////////////////////////////////// Utility Functions  ////////////////////////////////////////////////////////////
+
+        [[nodiscard]] bool
             CreateLogFile
             (
                 const string& fp_FilePath,
                 const string& fp_FileName
             )
         {
-            ofstream f_LogFile;
+            ////////////////////////////////////////////// Cache Full Path String //////////////////////////////////////////////
 
-            f_LogFile.open(fp_FilePath + "/" + fp_FileName, ios::out | ios::app);
+            const string f_FullPath = fp_FilePath + "/" + fp_FileName;
+
+            ////////////////////////////////////////////// If file exists and is too big, truncate it //////////////////////////////////////////////
+            error_code f_ErrorCode;
+
+            if (filesystem::exists(f_FullPath, f_ErrorCode) and not f_ErrorCode)
+            {
+                auto f_LogFileSize = filesystem::file_size(f_FullPath, f_ErrorCode);
+
+                if (not f_ErrorCode and f_LogFileSize >= MAX_LOG_FILE_SIZE_BYTES)
+                {
+                    ////////////////////////////////////////////// truncate by reopening with ios::trunc //////////////////////////////////////////////
+
+                    ofstream f_LogFile(f_FullPath, ios::out | ios::trunc);
+
+                    if (not f_LogFile.is_open())
+                    {
+                        PrintError(format("Failed to truncate oversized log file: '{}' with logger named: {}", fp_FileName, pm_LoggerName));
+                        return false;
+                    }
+
+                    pm_LogFiles[fp_FileName] = move(f_LogFile);
+
+                    ////////////////////////////////////////////// Success! //////////////////////////////////////////////
+
+                    return true;
+                }
+            }
+
+            ////////////////////////////////////////////// If file doesn't exist or isn't too big it's business as usual UwU //////////////////////////////////////////////
+
+            ofstream f_LogFile(f_FullPath, ios::out | ios::app);
 
             if (not f_LogFile.is_open())
             {
-                PrintError(format("Failed to open log file: '{}'", fp_FileName));
+                PrintError(format("Failed to open log file: '{}' with logger named: {}", fp_FileName, pm_LoggerName));
+                return false;
             }
-            else
-            {
-                pm_LogFiles[fp_FileName] = move(f_LogFile);
-            }
+
+            pm_LogFiles[fp_FileName] = move(f_LogFile);
+
+            ////////////////////////////////////////////// Success! //////////////////////////////////////////////
+
+            return true;
         }
 
         [[nodiscard]] inline string //thank you chat-gpt uwu
             GetCurrentTimestamp()
-            const noexcept
+            const
         {
             const auto now = chrono::system_clock::now();
             auto time_t_now = chrono::system_clock::to_time_t(now);
@@ -1107,15 +1484,15 @@ namespace GGPO {
             localtime_r(&time_t_now, &local_time);
 #endif
 
-            stringstream ss;
-            ss << put_time(&local_time, "%Y-%m-%d %H:%M:%S");
+            stringstream f_AssembledTimeString;
+            f_AssembledTimeString << put_time(&local_time, "%Y-%m-%d %H:%M:%S");
 
             const auto since_epoch = now.time_since_epoch();
             const auto milliseconds = chrono::duration_cast<chrono::milliseconds>(since_epoch).count() % 1000;
 
-            ss << '.' << setfill('0') << setw(3) << milliseconds;
+            f_AssembledTimeString << '.' << setfill('0') << setw(3) << milliseconds;
 
-            return ss.str();
+            return f_AssembledTimeString.str();
         }
 
         void
@@ -1130,7 +1507,6 @@ namespace GGPO {
             }
         }
 
-#ifdef GGPO_DEBUG
         [[nodiscard]] inline bool ///XXX: used for testing, this method should never call exit() for a production release, since all logging is hidden away from the game engine dev
             AssertThreadAccess(const string& fp_FunctionName) //we don't require a lock since this method guarantees only one thread is operating on any data within the Logger instance
             const
@@ -1148,45 +1524,34 @@ namespace GGPO {
 
             return false;
         }
-#endif
+
+        void
+            ForceFlushAllLogs() //called by functions that already do an AssertThreadAccess call in them uwu this is to avoid double calling OwO!
+        {
+            for (auto& lv_LogFile : pm_LogFiles)
+            {
+                if (lv_LogFile.second.is_open())
+                {
+                    lv_LogFile.second.flush();
+                }
+            }
+
+            pm_LogSizeCounter = 0; //reset since all logs have been flushed
+        }
+
+        static constexpr uint8_t
+            ExtractLevelMask(uint32_t fp_Flags) noexcept
+        {
+            return static_cast<uint8_t>(fp_Flags & 0xFF);
+        }
+
+        static constexpr uint8_t
+            ExtractFlushMask(uint32_t fp_Flags) noexcept
+        {
+            return static_cast<uint8_t>((fp_Flags >> 8) & 0xFF);
+        }
     };
 } //gonna implement namespace after i compile ig ill add that to the TODO -- when the fuck did i write this lmfao
-
- //=========================================================================================== Macros ===========================================================================================//
-
-namespace GGPO {
-
-#ifndef GGPO_MAX_INT
-#  define GGPO_MAX_INT   18446744073709551615 //largest value for a unsigned 64 bit int
-#endif
-
-#ifndef GGPO_MAX
-#  define GGPO_MAX(x, y)        (((x) > (y)) ? (x) : (y))
-#endif
-
-#ifndef GGPO_MIN
-#  define GGPO_MIN(x, y)        (((x) < (y)) ? (x) : (y))
-#endif
-
-#ifdef GGPO_DEBUG
-
-#define GGPO_ASSERT(fp_Expr) \
-        do { \
-            if (not (fp_Expr)) \
-            { \
-                GGPO::Platform::AssertFailed(__FILE__, __LINE__, #fp_Expr, GGPO::Platform::GetProcessID()); \
-            } \
-        } while (not 69)
-
-#else
-
-#define GGPO_ASSERT(fp_Expr) 
-
-#endif
-
-#define GGPO_ARRAY_SIZE(x) sizeof(x) / sizeof(x[0])
-
-}
 
 //=========================================================================================== BitVector Stuff ===========================================================================================//
 
@@ -1605,8 +1970,9 @@ namespace GGPO
     public:
         InputQueue(int input_size = DEFAULT_INPUT_SIZE) //???? why do it like this lmfao y not just do it inside the constructor body lol
         {
-            input_queue_logger = make_unique<Logger>();
-            input_queue_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "InputQueueLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+           input_queue_logger = Logger::CreateUnique("InputQueueLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+
+           GGPO_ASSERT(input_queue_logger)
             
             Init(-1, input_size);
         };
@@ -2123,8 +2489,9 @@ namespace GGPO
              _local_connect_status(connect_status),
              _input_queues(NULL)
          {
-            sync_logger = make_unique<Logger>();
-            sync_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "SyncLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+             sync_logger = Logger::CreateUnique("SyncLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+
+             GGPO_ASSERT(sync_logger)
 
              _framecount = 0;
              _last_confirmed_frame = -1;
@@ -2636,8 +3003,8 @@ namespace GGPO
      public:
          Udp()
          {
-             udp_logger = make_unique<Logger>();
-             udp_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "UDPLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+             udp_logger = Logger::CreateUnique("UDPLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+            GGPO_ASSERT(udp_logger) 
          }
 
          void
@@ -3028,8 +3395,9 @@ namespace GGPO
             _next_recv_seq(0),
             _udp(NULL)
         {
-            udp_protocol_logger = make_unique<Logger>();
-            udp_protocol_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "UDPProtocolLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+            udp_protocol_logger = Logger::CreateUnique("UDPProtocolLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+
+            GGPO_ASSERT(udp_protocol_logger)
 
             _last_sent_input.init(-1, NULL, 1);
             _last_received_input.init(-1, NULL, 1);
@@ -3116,7 +3484,7 @@ namespace GGPO
                      * (better, but still ug).  For the meantime, make this queue really big to decrease
                      * the odds of this happening...
                      */
-                    _pending_output.SafePush(input);
+                    _pending_output.TryPush(input);
                 }
                 SendPendingOutput();
             }
@@ -3918,8 +4286,9 @@ namespace GGPO
          ) :
              _sync(NULL)
          {
-            sync_test_backend_logger = make_unique<Logger>();
-            sync_test_backend_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "SyncTestBackendLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+             sync_test_backend_logger = Logger::CreateUnique("SyncTestBackendLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+             
+             GGPO_ASSERT(sync_test_backend_logger)
 
              _num_players = num_players;
              _check_distance = frames;
@@ -4149,8 +4518,9 @@ namespace GGPO
             _input_size(input_size),
             _next_input_to_send(0)
         {
-            spectator_backend_logger = make_unique<Logger>();
-            spectator_backend_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "SpectatorBackendLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+            spectator_backend_logger = Logger::CreateUnique("SpectatorBackendLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+             
+            GGPO_ASSERT(spectator_backend_logger)
 
             _synchronizing = true;
 
@@ -4280,7 +4650,7 @@ namespace GGPO
               case UdpProtocol::Event::Connected:
                   info.code = EventCode::ConnectedToPeer;
                   info.u.connected.player = 0;
-                  fp_EventQueue.ForcePush(info);
+                  fp_EventQueue.Push(info);
                   break;
 
               case UdpProtocol::Event::Synchronizing:
@@ -4288,7 +4658,7 @@ namespace GGPO
                   info.u.synchronizing.player = 0;
                   info.u.synchronizing.count = evt.u.synchronizing.count;
                   info.u.synchronizing.total = evt.u.synchronizing.total;
-                  fp_EventQueue.ForcePush(info);
+                  fp_EventQueue.Push(info);
                   break;
 
               case UdpProtocol::Event::Synchronzied:
@@ -4296,10 +4666,10 @@ namespace GGPO
                   {
                       info.code = EventCode::SynchronizedWithPeer;
                       info.u.synchronized.player = 0;
-                      fp_EventQueue.ForcePush(info);
+                      fp_EventQueue.Push(info);
 
                       info.code = EventCode::Running;
-                      fp_EventQueue.ForcePush(info);
+                      fp_EventQueue.Push(info);
                       _synchronizing = false;
                   }
                   break;
@@ -4308,19 +4678,19 @@ namespace GGPO
                   info.code = EventCode::ConnectionInterrupted;
                   info.u.connection_interrupted.player = 0;
                   info.u.connection_interrupted.disconnect_timeout = evt.u.network_interrupted.disconnect_timeout;
-                  fp_EventQueue.ForcePush(info);
+                  fp_EventQueue.Push(info);
                   break;
 
               case UdpProtocol::Event::NetworkResumed:
                   info.code = EventCode::ConnectionResumed;
                   info.u.connection_resumed.player = 0;
-                  fp_EventQueue.ForcePush(info);
+                  fp_EventQueue.Push(info);
                   break;
 
               case UdpProtocol::Event::Disconnected:
                   info.code = EventCode::DisconnectedFromPeer;
                   info.u.disconnected.player = 0;
-                  fp_EventQueue.ForcePush(info);
+                  fp_EventQueue.Push(info);
                   break;
 
               case UdpProtocol::Event::Input:
@@ -4374,8 +4744,9 @@ static constexpr int DEFAULT_DISCONNECT_NOTIFY_START = 750;
               _num_spectators(0),
               _next_spectator_frame(0)
           {
-            p2p_backend_logger = make_unique<Logger>();
-            p2p_backend_logger->Initialize(GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY, "Peer2PeerBackendLogger", GGPO_DEFAULT_LOG_LEVEL_FILTER);
+              p2p_backend_logger = Logger::CreateUnique("Peer2PeerBackendLogger", GGPO_DEFAULT_LOGGER_FLAGS, GGPO_DEFAULT_LOG_OUTPUT_DIRECTORY);
+
+              GGPO_ASSERT(p2p_backend_logger) //check for successful creation uwu
 
               _synchronizing = true;
               _next_recommended_sleep = 0;
