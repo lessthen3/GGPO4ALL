@@ -1,13 +1,13 @@
-/*******************************************************************
- *                        Peach-E v0.0.1
- *              Created by Ranyodh Mandur - 🍑 2024
+/************************************************************************************************************
+ *                                          GGPO4ALL v0.0.1
+ *              Created by Ranyodh Mandur - ✨ 2025 and GroundStorm Studios, LLC. - ✨ 2009
  *
- *              Licensed under the MIT License (MIT).
- *         For more details, see the LICENSE file or visit:
- *               https://opensource.org/licenses/MIT
+ *                                Licensed under the MIT License (MIT).
+ *                           For more details, see the LICENSE file or visit:
+ *                                  https://opensource.org/licenses/MIT
  *
- *           Peach-E is a free open source game engine
-********************************************************************/
+ *                        GGPO4ALL is a free open source rollback netcode library
+************************************************************************************************************/
 #ifndef GGPO4ALL_API_C_H_
 #define GGPO4ALL_API_C_H_
 
@@ -17,7 +17,6 @@
 #include <stdint.h> //idrc about supporting C standards from before i was born lmfao, C99+ only fuck you if you use C89 still ISO standard is C11 idgaf ab ur old ahh ABI
 
 #include "StatusCodes.h"
-#include "LoggerFlags.h"
 
 //////////////////////////////////////////////////////////// C++ --> C compatibility preprocessor defs ////////////////////////////////////////////////////////////
 
