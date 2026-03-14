@@ -8,13 +8,14 @@
  *
  *                        GGPO4ALL is a free open source rollback netcode library
 ************************************************************************************************************/
-#include <cstdint>
 #include <csignal>
+#include <cstdlib>
+
 
 #define GGPO_USING_CONSOLE
 #define GGPO_DEBUG
 
-#include "../../GGPO4ALL.hpp"
+#include "Peer2Peer.h"
 
 static void
     SegFaultHandler(int fp_Signal)

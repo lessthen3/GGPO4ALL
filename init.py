@@ -87,6 +87,7 @@ def run_cmake(fp_BuildType: str, fp_Generator: str, fp_ProjectDir: str = ".") ->
     f_BuildDir = os.path.join(fp_ProjectDir, "build")
 
     f_GeneratorMap = {
+        "vs2026": "Visual Studio 18 2026",
         "vs2022": "Visual Studio 17 2022",
         "vs2019": "Visual Studio 16 2019",
         "vs2017": "Visual Studio 15 2017",
@@ -115,7 +116,7 @@ def run_cmake(fp_BuildType: str, fp_Generator: str, fp_ProjectDir: str = ".") ->
     
     ############# Determine if Generator is Single Config #############
     
-    f_IsMultiConfig = fp_Generator in ["vs2022", "vs2019", "vs2017", "vs2015", "xcode", "ninja-mc"]
+    f_IsMultiConfig = fp_Generator in ["vs2026", "vs2022", "vs2019", "vs2017", "vs2015", "xcode", "ninja-mc"]
 
     f_CMakeConfigCommand = [
         'cmake', 

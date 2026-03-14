@@ -8,29 +8,27 @@
  *
  *                        GGPO4ALL is a free open source rollback netcode library
 ************************************************************************************************************/
-#include <csignal>
-#include <cstdlib>
+#ifndef GGPO4ALL_STATUS_CODES_C_H
+#define GGPO4ALL_STATUS_CODES_C_H
 
-#define GGPO_USING_CONSOLE
-#define GGPO_DEBUG
-
-#include "Spectator.h"
-
-static void
-    SegFaultHandler(int fp_Signal)
+#ifdef __cplusplus
+extern "C"
 {
-    GGPO::PrintError(std::format("[!] FATAL_SEGMENTATION_FAULT, Crash signal received: {}", fp_Signal));
-    // possibly notify watchdog or dump stack trace
-    exit(EXIT_FAILURE);
+#endif
+    typedef enum GGPO4ALL_STATUS_CODE //only C23 supports the : int64_t definition which is not great for compatibility
+    {
+        //////////////////////// GGPO General ////////////////////////
+
+        GGPO_OK = 1,
+
+        GGPO_ERROR_INTERNAL_API_FAILURE,
+        GGPO_ERROR_NULLPTR_REF_PASSED,
+        GGPO_INVALID_SESSION_ID
+
+    } StatusCodes;
+
+#ifdef __cplusplus
 }
+#endif
 
-
-int 
-    main(int fp_ArgCount, const char* fp_ArgVector[])
-{
-    signal(SIGSEGV, SegFaultHandler); //XXX: used for trying to close and flush logs on seg fault
-
-    GGPO::Print("UwU Rawr >O<", GGPO::Colours::BrightMagenta);
-
-    return EXIT_SUCCESS;
-}
+#endif /* GGPO4ALL_STATUS_CODES_C_H */
