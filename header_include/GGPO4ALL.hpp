@@ -1778,9 +1778,14 @@ constexpr int MAX_FRAME_ADVANTAGE = 9;
 constexpr int MAX_COMPRESSED_BITS = 4096;
 constexpr int UDP_MSG_MAX_PLAYERS = 4;
 
+struct MessageTCP
+{
+
+};
+
 //#pragma pack(push, 1)
 
-struct UdpMsg
+struct MessageUDP
 {
     enum MsgType
     {
@@ -1881,7 +1886,7 @@ public:
         return 0;
     }
 
-    UdpMsg(MsgType t) { hdr.type = (uint8_t)t; }
+    MessageUDP(MsgType t) { hdr.type = (uint8_t)t; }
 };
 
 //#pragma pack(pop) 
